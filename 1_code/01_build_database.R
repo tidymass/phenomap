@@ -164,26 +164,32 @@ dbWriteTable(con, "module", module_tbl, overwrite = TRUE)
 dbWriteTable(con, "member", member_tbl, overwrite = TRUE)
 
 # Indexes for fast lookup
-dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_inchi   ON member(INCHI_ID)")
-dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_hmdb    ON member(HMDB_ID)")
-dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_kegg    ON member(KEGG_ID)")
-dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_module  ON member(global_module_id)")
-dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_module_study   ON module(study_id)")
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_inchi   ON member(INCHI_ID)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_hmdb    ON member(HMDB_ID)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_kegg    ON member(KEGG_ID)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_member_module  ON member(global_module_id)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_module_study   ON module(study_id)"))
 
-# signature table (only if signature.csv files were found)
+# signature table (prefer exported signature.csv; otherwise derive from module/member)
 if (nrow(sig_tbl) > 0) {
   dbWriteTable(con, "signature", sig_tbl, overwrite = TRUE)
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_inchi  ON signature(INCHI_ID)")
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_hmdb   ON signature(HMDB_ID)")
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_kegg   ON signature(KEGG_ID)")
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_module ON signature(global_module_id)")
-  dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_tier   ON signature(tier)")
+  invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_inchi  ON signature(INCHI_ID)"))
+  invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_hmdb   ON signature(HMDB_ID)"))
+  invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_kegg   ON signature(KEGG_ID)"))
+  invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_module ON signature(global_module_id)"))
+  invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_tier   ON signature(tier)"))
   cat(sprintf("Signature table written: %d rows\n", nrow(sig_tbl)))
 } else {
-  cat("No signature.csv found — re-run 01_export_study_modules.R with OVERWRITE=TRUE first.\n")
+  cat("No signature.csv found — deriving signature from module/member tables after DB write.\n")
 }
 
 dbDisconnect(con)
+
+if (nrow(sig_tbl) == 0) {
+  source("1_code/04_build_signature.R")
+}
+
+source("1_code/05_build_atlas_modules.R")
 
 cat("Database written to:", DB_PATH, "\n")
 
