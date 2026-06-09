@@ -3,7 +3,7 @@
 #
 # Derives a query-ready signature table from the current SQLite atlas:
 #   anchor: LLM-selected anchor_metabolites resolved back to member IDs
-#   top:    top member metabolites ranked by importance and node frequency
+#   top:    LLM/module-function core_drivers resolved back to member IDs
 #
 # Also writes anchor_unmatched for manual review.
 # =============================================================================
@@ -15,7 +15,6 @@ suppressPackageStartupMessages({
 })
 
 DB_PATH <- "2_data/phenomap_v0.1.db"
-TOP_N   <- 50
 
 normalize_name <- function(x) {
   x %>%
@@ -59,99 +58,158 @@ best_fuzzy_match <- function(anchor_name, anchor_norm, candidates) {
     )
 }
 
-build_signature_tables <- function(module_tbl, member_tbl, top_n = TOP_N) {
-  member_lookup <- member_tbl %>%
-    mutate(compound_norm = normalize_name(Compound_name)) %>%
-    filter(!is.na(INCHI_ID), compound_norm != "") %>%
-    distinct(global_module_id, compound_norm, Compound_name, INCHI_ID, HMDB_ID, KEGG_ID)
+resolve_named_signature <- function(module_tbl,
+                                    member_lookup,
+                                    source_col,
+                                    tier,
+                                    priority_from_rank = FALSE) {
+  if (!source_col %in% colnames(module_tbl)) {
+    empty_sig <- tibble(
+      global_module_id = character(),
+      study_id = character(),
+      INCHI_ID = character(),
+      HMDB_ID = character(),
+      KEGG_ID = character(),
+      Compound_name = character(),
+      tier = character(),
+      weighted_score = numeric(),
+      priority_level = character(),
+      source_name = character(),
+      match_method = character(),
+      match_score = numeric()
+    )
+    empty_unmatched <- tibble(
+      global_module_id = character(),
+      study_id = character(),
+      tier = character(),
+      source_rank = integer(),
+      source_name = character()
+    )
+    return(list(signature = empty_sig, unmatched = empty_unmatched))
+  }
 
-  anchors <- module_tbl %>%
-    filter(!is.na(anchor_metabolites), anchor_metabolites != "", anchor_metabolites != "NA") %>%
-    select(global_module_id, study_id, anchor_metabolites) %>%
-    separate_rows(anchor_metabolites, sep = ";") %>%
+  sources <- module_tbl %>%
+    filter(!is.na(.data[[source_col]]), .data[[source_col]] != "", .data[[source_col]] != "NA") %>%
+    select(global_module_id, study_id, source_text = all_of(source_col)) %>%
+    separate_rows(source_text, sep = ";") %>%
     mutate(
-      anchor_name = str_squish(anchor_metabolites),
-      anchor_norm = normalize_name(anchor_name)
+      source_name = str_squish(source_text),
+      source_norm = normalize_name(source_name)
     ) %>%
-    filter(anchor_name != "", anchor_norm != "") %>%
+    filter(source_name != "", source_norm != "") %>%
     group_by(global_module_id) %>%
-    mutate(anchor_rank = row_number()) %>%
+    mutate(source_rank = row_number()) %>%
     ungroup() %>%
-    select(global_module_id, study_id, anchor_rank, anchor_name, anchor_norm)
+    select(global_module_id, study_id, source_rank, source_name, source_norm)
 
-  exact_anchor <- anchors %>%
-    left_join(member_lookup, by = c("global_module_id", "anchor_norm" = "compound_norm")) %>%
+  exact <- sources %>%
+    left_join(member_lookup, by = c("global_module_id", "source_norm" = "compound_norm")) %>%
     mutate(
       match_method = if_else(!is.na(INCHI_ID), "exact", NA_character_),
       match_score = if_else(!is.na(INCHI_ID), 1, NA_real_)
     )
 
-  matched_exact <- exact_anchor %>%
+  matched_exact <- exact %>%
     filter(!is.na(INCHI_ID))
 
-  unmatched_exact <- exact_anchor %>%
+  unmatched_exact <- exact %>%
     filter(is.na(INCHI_ID)) %>%
-    select(global_module_id, study_id, anchor_rank, anchor_name, anchor_norm)
+    select(global_module_id, study_id, source_rank, source_name, source_norm)
 
-  fuzzy_anchor <- unmatched_exact %>%
-    group_by(global_module_id) %>%
-    group_modify(~ {
-      candidates <- member_lookup %>% filter(global_module_id == .y$global_module_id)
-      map_dfr(seq_len(nrow(.x)), function(i) {
-        match <- best_fuzzy_match(.x$anchor_name[i], .x$anchor_norm[i], candidates)
-        bind_cols(.x[i, ], match)
-      })
-    }) %>%
-    ungroup()
+  if (nrow(unmatched_exact) > 0) {
+    fuzzy <- unmatched_exact %>%
+      group_by(global_module_id) %>%
+      group_modify(~ {
+        candidates <- member_lookup %>% filter(global_module_id == .y$global_module_id)
+        map_dfr(seq_len(nrow(.x)), function(i) {
+          match <- best_fuzzy_match(.x$source_name[i], .x$source_norm[i], candidates)
+          bind_cols(.x[i, ], match)
+        })
+      }) %>%
+      ungroup()
+  } else {
+    fuzzy <- unmatched_exact %>%
+      mutate(
+        Compound_name = NA_character_,
+        INCHI_ID = NA_character_,
+        HMDB_ID = NA_character_,
+        KEGG_ID = NA_character_,
+        match_method = NA_character_,
+        match_score = NA_real_
+      )
+  }
 
-  matched_fuzzy <- fuzzy_anchor %>%
+  matched_fuzzy <- fuzzy %>%
     filter(!is.na(INCHI_ID))
 
-  anchor_sig <- bind_rows(matched_exact, matched_fuzzy) %>%
+  sig <- bind_rows(matched_exact, matched_fuzzy) %>%
+    mutate(
+      priority_level = case_when(
+        !priority_from_rank ~ "high",
+        source_rank <= 5 ~ "high",
+        source_rank <= 10 ~ "medium",
+        TRUE ~ "low"
+      )
+    ) %>%
     transmute(
       global_module_id, study_id, INCHI_ID, HMDB_ID, KEGG_ID, Compound_name,
-      tier = "anchor",
-      weighted_score = 1,
-      priority_level = "high",
-      source_name = anchor_name,
+      tier = tier,
+      weighted_score,
+      priority_level,
+      source_name,
       match_method,
       match_score
     ) %>%
     distinct()
 
-  anchor_unmatched <- fuzzy_anchor %>%
+  unmatched <- fuzzy %>%
     filter(is.na(INCHI_ID)) %>%
-    transmute(global_module_id, study_id, anchor_rank, anchor_name)
+    transmute(global_module_id, study_id, tier, source_rank, source_name)
 
-  top_sig <- member_tbl %>%
-    filter(use_for_annotation == 1, !is.na(INCHI_ID)) %>%
+  list(signature = sig, unmatched = unmatched)
+}
+
+build_signature_tables <- function(module_tbl, member_tbl) {
+  member_lookup <- member_tbl %>%
     mutate(weighted_score = 0.7 * importance + 0.3 * node_freq) %>%
-    group_by(global_module_id) %>%
-    arrange(desc(weighted_score), .by_group = TRUE) %>%
-    slice_head(n = top_n) %>%
-    mutate(
-      top_rank = row_number(),
-      priority_level = case_when(
-        top_rank <= 10 ~ "high",
-        top_rank <= ceiling(top_n / 2) ~ "medium",
-        TRUE ~ "low"
-      )
-    ) %>%
+    mutate(compound_norm = normalize_name(Compound_name)) %>%
+    filter(!is.na(INCHI_ID), compound_norm != "") %>%
+    arrange(global_module_id, compound_norm, desc(weighted_score)) %>%
+    group_by(global_module_id, compound_norm) %>%
+    slice_head(n = 1) %>%
     ungroup() %>%
+    select(global_module_id, compound_norm, Compound_name, INCHI_ID, HMDB_ID, KEGG_ID, weighted_score)
+
+  anchor_res <- resolve_named_signature(
+    module_tbl = module_tbl,
+    member_lookup = member_lookup,
+    source_col = "anchor_metabolites",
+    tier = "anchor",
+    priority_from_rank = FALSE
+  )
+
+  top_res <- resolve_named_signature(
+    module_tbl = module_tbl,
+    member_lookup = member_lookup,
+    source_col = "core_drivers",
+    tier = "top",
+    priority_from_rank = TRUE
+  )
+
+  signature_unmatched <- bind_rows(anchor_res$unmatched, top_res$unmatched)
+  anchor_unmatched <- signature_unmatched %>%
+    filter(tier == "anchor") %>%
     transmute(
-      global_module_id, study_id, INCHI_ID, HMDB_ID, KEGG_ID, Compound_name,
-      tier = "top",
-      weighted_score,
-      priority_level,
-      source_name = Compound_name,
-      match_method = "member_rank",
-      match_score = NA_real_
-    ) %>%
-    distinct()
+      global_module_id,
+      study_id,
+      anchor_rank = source_rank,
+      anchor_name = source_name
+    )
 
   list(
-    signature = bind_rows(anchor_sig, top_sig) %>% distinct(),
-    anchor_unmatched = anchor_unmatched
+    signature = bind_rows(anchor_res$signature, top_res$signature) %>% distinct(),
+    anchor_unmatched = anchor_unmatched,
+    signature_unmatched = signature_unmatched
   )
 }
 
@@ -160,10 +218,11 @@ con <- dbConnect(SQLite(), DB_PATH)
 module_tbl <- dbReadTable(con, "module")
 member_tbl <- dbReadTable(con, "member")
 
-tables <- build_signature_tables(module_tbl, member_tbl, TOP_N)
+tables <- build_signature_tables(module_tbl, member_tbl)
 
 dbWriteTable(con, "signature", tables$signature, overwrite = TRUE)
 dbWriteTable(con, "anchor_unmatched", tables$anchor_unmatched, overwrite = TRUE)
+dbWriteTable(con, "signature_unmatched", tables$signature_unmatched, overwrite = TRUE)
 
 invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_inchi  ON signature(INCHI_ID)"))
 invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_hmdb   ON signature(HMDB_ID)"))
@@ -171,6 +230,8 @@ invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_kegg   ON signature
 invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_module ON signature(global_module_id)"))
 invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_sig_tier   ON signature(tier)"))
 invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_anchor_unmatched_module ON anchor_unmatched(global_module_id)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_signature_unmatched_module ON signature_unmatched(global_module_id)"))
+invisible(dbExecute(con, "CREATE INDEX IF NOT EXISTS idx_signature_unmatched_tier ON signature_unmatched(tier)"))
 
 dbDisconnect(con)
 

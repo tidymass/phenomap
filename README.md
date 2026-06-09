@@ -65,7 +65,8 @@ Rscript 1_code/04_build_signature.R
 The derived signature uses:
 
 - `anchor`: LLM-selected `anchor_metabolites`, matched back to module members by name.
-- `top`: top 50 annotation-eligible members per module, ranked by `0.7 * importance + 0.3 * node_freq`.
+- `top`: `core_drivers` from `module_function`, matched back to module members
+  by name.
 
 ## Build Atlas Only
 
@@ -104,6 +105,10 @@ print_query_result(res)
 
 - `anchor`: compact module identity signature
 - `top`: broader discriminating module signature
+
+Anchor signatures are primary evidence. Core-driver signatures are also tested,
+but only modules not already recovered by anchor enrichment are displayed as
+supplemental results.
 
 If a database does not include `signature`, the query script falls back to the
 existing `member` table:

@@ -3,8 +3,8 @@
 #
 # Two-tier ORA using the `signature` table:
 #   Tier 1 (anchor): LLM-selected anchor metabolites — module's core identity
-#   Tier 2 (top):    All topN metabolites (use_for_annotation, ranked by
-#                    weighted_score) — broader but still discriminating
+#   Tier 2 (top):    LLM/module-function core_drivers — used only when anchor
+#                    does not recover the module
 #
 # Both tiers have full INCHI_ID / HMDB_ID / KEGG_ID from the same annotation.
 #
@@ -85,6 +85,8 @@ run_ora <- function(sig, ids, col, min_hits, fdr_cutoff) {
 #' @param db_path    Path to phenomap SQLite database
 #' @param min_hits   Min hits per module (default 2)
 #' @param fdr_cutoff FDR threshold (default 0.2; set 1 to see all)
+#' @param core_fdr_cutoff FDR threshold for core-driver/top fallback results.
+#'                        Defaults to fdr_cutoff.
 #' @param level      "atlas" for merged cross-study modules, or "instance" for
 #'                   original study-specific modules
 #'
@@ -94,6 +96,7 @@ query_phenomap <- function(ids,
                            db_path    = DB_PATH,
                            min_hits   = 2,
                            fdr_cutoff = 0.2,
+                           core_fdr_cutoff = fdr_cutoff,
                            level      = c("atlas", "instance")) {
 
   id_type <- match.arg(id_type)
@@ -233,15 +236,19 @@ query_phenomap <- function(ids,
   # ---- Tier 1: anchor --------------------------------------------------------
   res1 <- run_ora(sig_anchor, ids, col, min_hits, fdr_cutoff)
 
-  # ---- Tier 2: top (exclude already-found modules) ---------------------------
+  # ---- Tier 2: core/top ------------------------------------------------------
+  # Anchor is the primary module identity test. Core-driver signatures are also
+  # tested independently, but only novel modules are displayed as supplemental
+  # evidence.
+  res2_all <- run_ora(sig_top, ids, col, min_hits, core_fdr_cutoff)
   found_in_tier1 <- res1$global_module_id
-  res2 <- run_ora(
-    sig_top %>% filter(!global_module_id %in% found_in_tier1),
-    ids, col, min_hits, fdr_cutoff
-  )
+  res2 <- res2_all %>%
+    filter(!global_module_id %in% found_in_tier1)
 
-  cat(sprintf("[query:%s] Tier-1 (anchor): %d | Tier-2 (top): %d significant modules\n",
-              level, nrow(res1), nrow(res2)))
+  cat(sprintf(
+    "[query:%s] Tier-1 (anchor): %d | Tier-2 (core novel): %d (%d total core significant)\n",
+    level, nrow(res1), nrow(res2), nrow(res2_all)
+  ))
 
   # ---- Combine ---------------------------------------------------------------
   bind_rows(
@@ -277,11 +284,11 @@ print_query_result <- function(res, top_n = 20) {
 
   res %>%
     slice_head(n = top_n) %>%
+    mutate(.result_rank = row_number()) %>%
     rowwise() %>%
     group_walk(~ {
       r <- .x
-      idx <- which(res$global_module_id == r$global_module_id)[1]
-      cat(sprintf("%-3d [%s] <%s>\n", idx, r$global_module_id, r$match_tier))
+      cat(sprintf("%-3d [%s] <%s>\n", r$.result_rank, r$global_module_id, r$match_tier))
       cat(sprintf("    Title:    %s\n", r$title))
       cat(sprintf("    Type:     %s | Confidence: %s\n",
                   r$hypothesis_type, r$confidence_label))
