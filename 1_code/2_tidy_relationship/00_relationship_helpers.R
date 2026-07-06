@@ -74,7 +74,8 @@ phenomap_normalize_minmax <- function(x) {
 phenomap_module_node_lookup <- function(entity_dir = file.path("2_data", "tidy_entity")) {
   modules <- phenomap_read_csv_required(file.path(entity_dir, "nodes_module.csv"))
   needed <- c(
-    "module_id", "study_id", "anchor_metabolite_ids", "top_metabolite_ids",
+    "Lab_ID", "Study_ID", "module_id", "anchor_metabolite_ids", "supporting_metabolite_ids",
+    "contextual_metabolite_ids",
     "Module_size", "Annotated_nodes", "Module_score", "p", "fdr"
   )
   for (nm in needed) if (!nm %in% colnames(modules)) modules[[nm]] <- NA

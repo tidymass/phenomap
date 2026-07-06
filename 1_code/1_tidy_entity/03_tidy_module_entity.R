@@ -132,6 +132,21 @@ build_module_entity_one_case <- function(case_dir, study_id_map) {
     }
   }
 
+  names(module_function)[names(module_function) == "top_metabolites"] <- "supporting_metabolites"
+  names(module_function)[names(module_function) == "top_metabolite_ids"] <- "supporting_metabolite_ids"
+  preferred_order <- c(
+    "module_id", "annotation_mode", "hypothesis_type", "title", "functional_summary",
+    "anchor_metabolites", "anchor_metabolite_ids",
+    "supporting_metabolites", "supporting_metabolite_ids",
+    "contextual_metabolites", "contextual_metabolite_ids"
+  )
+  module_function <- module_function[
+    ,
+    c(intersect(preferred_order, colnames(module_function)),
+      setdiff(colnames(module_function), preferred_order)),
+    drop = FALSE
+  ]
+
   data.frame(
     Study_ID = rep(study_lab_id, nrow(module_function)),
     module_function,
