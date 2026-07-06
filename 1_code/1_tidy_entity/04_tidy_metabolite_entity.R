@@ -3,182 +3,122 @@
 # Output:
 #   nodes_metabolite.csv
 #
-# Current source priority:
-#   1. featuremap MRN resource nodes
-#   2. featuremap functional/pathway references, when cached/available
-#
-# Note:
-#   FeatureMAP modules are detected on MRN nodes, so the metabolite master table
-#   should come directly from the MRN. Case-level results will be used later for
-#   Metabolite-Module relationships, not for defining the metabolite universe.
-#   metabolite_id follows the MRN node convention and equals INCHI_ID when
-#   available.
+# Source: featuremap MRN resource nodes (igraph or tbl_graph).
+# ID: PMAP_META_xxxx assigned by compound name alphabetical order.
 
 source(file.path("1_code", "1_tidy_entity", "00_entity_helpers.R"))
 
-standardize_metabolite_rows <- function(df) {
-  if (!is.data.frame(df) || nrow(df) == 0) return(data.frame())
-
-  hmdb <- phenomap_col(df, "HMDB_ID", phenomap_col(df, "HMDB.ID"))
-  kegg <- phenomap_col(df, "KEGG_ID", phenomap_col(df, "KEGG.ID"))
-  inchi <- phenomap_col(df, "INCHI_ID")
-  name <- phenomap_col(df, "Compound_name", phenomap_col(df, "Compound.name"))
-
-  inchikey <- phenomap_col(df, "InChIKey", phenomap_col(df, "INCHIKEY"))
-
-  out <- data.frame(
-    metabolite_id = mapply(
-      phenomap_make_metabolite_id,
-      hmdb_id = hmdb,
-      kegg_id = kegg,
-      inchikey = inchikey,
-      inchi_id = inchi,
-      name = name,
-      USE.NAMES = FALSE
-    ),
-    hmdb_id = as.character(hmdb),
-    kegg_id = as.character(kegg),
-    inchi_id = as.character(inchi),
-    metabolite_name = as.character(name),
-    stringsAsFactors = FALSE
-  )
-
-  out$hmdb_id[!nzchar(out$hmdb_id) | out$hmdb_id %in% c("NA", "<NA>")] <- NA
-  out$kegg_id[!nzchar(out$kegg_id) | out$kegg_id %in% c("NA", "<NA>")] <- NA
-  out$inchi_id[!nzchar(out$inchi_id) | out$inchi_id %in% c("NA", "<NA>")] <- NA
-  out$metabolite_name[!nzchar(out$metabolite_name) | out$metabolite_name %in% c("NA", "<NA>")] <- NA
-
-  out$hmdb_url <- vapply(out$hmdb_id, phenomap_hmdb_url, character(1))
-  out$kegg_url <- vapply(out$kegg_id, phenomap_kegg_url, character(1))
-
-  out
-}
-
-build_metabolite_entity_one_case <- function(case_dir,
-                                             include_annotation_table = FALSE) {
-  res <- phenomap_load_res(case_dir)
-  if (is.null(res)) return(data.frame())
-
-  module_table <- phenomap_safe_df(res$module_table)
-
-  rows <- list(standardize_metabolite_rows(module_table))
-  if (isTRUE(include_annotation_table)) {
-    anno_table <- phenomap_safe_df(res$anno_feature_table2)
-    rows <- c(rows, list(standardize_metabolite_rows(anno_table)))
-  }
-
-  rows <- rows[vapply(rows, nrow, integer(1)) > 0]
-  if (length(rows) == 0) return(data.frame())
-  out <- do.call(rbind, rows)
-  out <- out[!is.na(out$metabolite_id) & nzchar(out$metabolite_id), , drop = FALSE]
-  out <- out[!duplicated(out$metabolite_id), , drop = FALSE]
-  out
-}
-
-build_metabolite_entity_from_mrn <- function() {
+build_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entity")) {
   mrn <- phenomap_try_load_featuremap_resource("mrn")
-  if (is.null(mrn)) {
-    stop("Could not load featuremap MRN resource 'mrn'.")
-  }
+  if (is.null(mrn)) stop("Could not load featuremap MRN resource 'mrn'.")
 
-  nodes <- NULL
   if (requireNamespace("igraph", quietly = TRUE) && inherits(mrn, "igraph")) {
     nodes <- igraph::as_data_frame(mrn, what = "vertices")
-  } else if (requireNamespace("tidygraph", quietly = TRUE) && inherits(mrn, "tbl_graph")) {
+  } else {
     nodes <- as.data.frame(tidygraph::activate(mrn, nodes))
   }
 
-  if (is.null(nodes) || !is.data.frame(nodes) || nrow(nodes) == 0) {
-    stop("Could not extract node table from MRN resource.")
+  hmdb  <- phenomap_col(nodes, "HMDB_ID",       phenomap_col(nodes, "HMDB.ID"))
+  kegg  <- phenomap_col(nodes, "KEGG_ID",       phenomap_col(nodes, "KEGG.ID"))
+  inchi <- phenomap_col(nodes, "INCHI_ID")
+  name  <- phenomap_col(nodes, "Compound_name", phenomap_col(nodes, "Compound.name"))
+
+  clean <- function(x) {
+    x <- as.character(x)
+    x[!nzchar(x) | toupper(x) %in% c("NA", "<NA>")] <- NA
+    x
   }
 
-  out <- standardize_metabolite_rows(nodes)
-  out <- out[!is.na(out$metabolite_id) & nzchar(out$metabolite_id), , drop = FALSE]
-  out <- out[!duplicated(out$metabolite_id), , drop = FALSE]
-  out
-}
+  out <- data.frame(
+    inchi_id       = clean(inchi),
+    hmdb_id        = clean(hmdb),
+    kegg_id        = clean(kegg),
+    metabolite_name = clean(name),
+    hmdb_chemical_class = phenomap_col(nodes, "hmdb_chemical_class", NA_character_),
+    kegg_chemical_class = phenomap_col(nodes, "kegg_chemical_class", NA_character_),
+    origin         = phenomap_col(nodes, "origin", NA_character_),
+    stringsAsFactors = FALSE
+  )
 
-build_metabolite_entity <- function(case_root,
-                                    output_dir = file.path("2_data", "tidy_entity"),
-                                    enrich_from_featuremap_resources = TRUE,
-                                    include_annotation_table = FALSE,
-                                    source = c("mrn", "case_modules")) {
-  source <- match.arg(source)
+  out <- out[!is.na(out$inchi_id), , drop = FALSE]
+  out <- out[!duplicated(out$inchi_id), , drop = FALSE]
 
-  if (identical(source, "mrn")) {
-    message("Reading metabolites from featuremap MRN resource.")
-    out <- build_metabolite_entity_from_mrn()
-  } else {
-    case_dirs <- phenomap_case_dirs(case_root, require_meta = TRUE, require_res = TRUE)
+  join_ref <- function(df, resource_name, id_col) {
+    ref <- phenomap_try_load_featuremap_resource(resource_name)
+    if (is.null(ref) || !is.data.frame(ref) || !id_col %in% colnames(df)) return(df)
+    ref <- as.data.frame(ref, stringsAsFactors = FALSE)
+    if (!"id" %in% colnames(ref)) return(df)
+    class_col <- phenomap_first_existing_col(ref, c("class", "chemical_class", "super_class", "direct_parent"))
+    origin_col <- phenomap_first_existing_col(ref, c("origin", "biological_origin", "source"))
+    keep_cols <- unique(c("id", class_col, origin_col))
+    keep_cols <- keep_cols[!is.na(keep_cols) & keep_cols %in% colnames(ref)]
+    ref <- ref[!duplicated(ref$id), keep_cols, drop = FALSE]
+    names(ref)[names(ref) == "id"] <- id_col
+    suffix <- sub("_id$", "", id_col)
+    for (nm in setdiff(names(ref), id_col)) names(ref)[names(ref) == nm] <- paste0(nm, ".", suffix)
+    merge(df, ref, by = id_col, all.x = TRUE, sort = FALSE)
+  }
 
-    seen <- new.env(parent = emptyenv())
-    chunks <- list()
-    chunk_i <- 0L
+  out <- join_ref(out, "functional_reference_hmdb", "hmdb_id")
+  out <- join_ref(out, "functional_reference_kegg", "kegg_id")
 
-    for (case_dir in case_dirs) {
-      message("Reading metabolites from ", basename(case_dir))
-      one <- build_metabolite_entity_one_case(
-        case_dir = case_dir,
-        include_annotation_table = include_annotation_table
-      )
-
-      if (nrow(one) > 0) {
-        keep <- !vapply(one$metabolite_id, exists, logical(1), envir = seen, inherits = FALSE)
-        if (any(keep)) {
-          new_ids <- one$metabolite_id[keep]
-          for (id in new_ids) assign(id, TRUE, envir = seen)
-          chunk_i <- chunk_i + 1L
-          chunks[[chunk_i]] <- one[keep, , drop = FALSE]
-        }
-      }
-
-      rm(one)
-      gc(verbose = FALSE)
+  coalesce_cols <- function(df, out_col, candidates) {
+    vals <- rep(NA_character_, nrow(df))
+    for (nm in candidates[candidates %in% colnames(df)]) {
+      cur <- as.character(df[[nm]])
+      vals[is.na(vals)] <- cur[is.na(vals)]
     }
-
-    if (length(chunks) == 0) {
-      out <- data.frame(
-        metabolite_id = character(),
-        hmdb_id = character(),
-        kegg_id = character(),
-        inchi_id = character(),
-        metabolite_name = character(),
-        stringsAsFactors = FALSE
-      )
-    } else {
-      out <- do.call(rbind, chunks)
-      rm(chunks)
-      gc(verbose = FALSE)
-    }
+    df[[out_col]] <- vals
+    df
   }
 
-  if (isTRUE(enrich_from_featuremap_resources)) {
-    message("Adding metabolite reference fields when featuremap resources are available.")
-    out <- phenomap_add_reference_fields(out)
-  } else {
-    out$hmdb_chemical_class <- NA_character_
-    out$kegg_chemical_class <- NA_character_
-    out$hmdb_pathway <- NA_character_
-    out$kegg_pathway <- NA_character_
-    out$origin <- NA_character_
-    out <- out[, c(
-      "metabolite_id", "hmdb_id", "kegg_id", "inchi_id",
-      "metabolite_name", "hmdb_chemical_class", "kegg_chemical_class",
-      "hmdb_pathway", "kegg_pathway",
-      "origin", "hmdb_url", "kegg_url"
-    ), drop = FALSE]
-  }
+  out <- coalesce_cols(out, "hmdb_chemical_class",
+    c("class.hmdb", "chemical_class.hmdb", "super_class.hmdb", "direct_parent.hmdb"))
+  out <- coalesce_cols(out, "kegg_chemical_class",
+    c("class.kegg", "chemical_class.kegg", "super_class.kegg", "direct_parent.kegg"))
+  out <- coalesce_cols(out, "origin",
+    c("origin.hmdb", "biological_origin.hmdb", "origin.kegg", "biological_origin.kegg"))
 
-  out <- out[order(out$metabolite_id), , drop = FALSE]
+  out <- out[order(tolower(out$metabolite_name)), , drop = FALSE]
+
+  out$id <- sprintf("PMAP_META_%04d", seq_len(nrow(out)))
+  out$hmdb_url <- vapply(out$hmdb_id, phenomap_hmdb_url, character(1))
+  out$kegg_url <- vapply(out$kegg_id, phenomap_kegg_url, character(1))
+
+  out <- out[, c(
+    "id", "metabolite_name", "inchi_id", "hmdb_id", "kegg_id",
+    "hmdb_chemical_class", "kegg_chemical_class", "origin",
+    "hmdb_url", "kegg_url"
+  )]
 
   phenomap_write_csv(out, file.path(output_dir, "nodes_metabolite.csv"))
   invisible(out)
 }
 
+format_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entity")) {
+  path <- file.path(output_dir, "nodes_metabolite.csv")
+  out <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  out$Lab_ID <- sprintf("PMAP_METAB_%06d", seq_len(nrow(out)))
+  out$id <- NULL
+  names(out) <- c(
+    metabolite_name = "Metabolite_Name",
+    inchi_id = "INCHI_ID",
+    hmdb_id = "HMDB_ID",
+    kegg_id = "KEGG_ID",
+    hmdb_chemical_class = "HMDB_Chemical_Class",
+    kegg_chemical_class = "KEGG_Chemical_Class",
+    origin = "Origin",
+    hmdb_url = "HMDB_URL",
+    kegg_url = "KEGG_URL",
+    Lab_ID = "Lab_ID"
+  )[names(out)]
+  out <- out[, c("Lab_ID", setdiff(names(out), "Lab_ID")), drop = FALSE]
+  phenomap_write_csv(out, path)
+  invisible(out)
+}
+
 if (identical(environment(), globalenv()) && !interactive()) {
   args <- phenomap_parse_args()
-  build_metabolite_entity(
-    case_root = args$case_root,
-    output_dir = args$output_dir
-  )
+  build_metabolite_entity(output_dir = args$output_dir)
+  format_metabolite_entity(output_dir = args$output_dir)
 }
