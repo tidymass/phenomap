@@ -5,7 +5,16 @@
 
 read_csv <- function(path) {
   if (!file.exists(path)) stop("Required file does not exist: ", path)
-  utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  clean_multiline_fields(utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE))
+}
+
+clean_multiline_fields <- function(df) {
+  text_cols <- vapply(df, is.character, logical(1))
+  df[text_cols] <- lapply(df[text_cols], function(x) {
+    x <- gsub("[\r\n]+", " ", x)
+    gsub("[[:space:]]+", " ", trimws(x))
+  })
+  df
 }
 
 write_csv <- function(df, path) {
@@ -24,7 +33,11 @@ neo4j_type <- function(x) {
 format_node <- function(path, label, output_path) {
   df <- read_csv(path)
   if (!"Lab_ID" %in% colnames(df)) stop(path, " must contain Lab_ID.")
-  names(df)[names(df) == "Lab_ID"] <- ":ID"
+  # neo4j-admin import treats ":ID" as a structural column only -- its values
+  # are used to wire up relationships but are NOT kept as a queryable node
+  # property after import. Keep Lab_ID as a normal property AND add a
+  # duplicate ":ID" column so the app can still look nodes up by Lab_ID.
+  df[":ID"] <- df$Lab_ID
   df[":LABEL"] <- label
   write_csv(df, output_path)
 }
