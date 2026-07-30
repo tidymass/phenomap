@@ -21,11 +21,12 @@ collapse_text <- function(x) {
 }
 
 map_input_metabolites <- function(input_ids, metabolites, id_type) {
-  id_type <- match.arg(id_type, c("hmdb", "kegg", "inchi"))
+  id_type <- match.arg(id_type, c("lab_id", "hmdb", "kegg", "inchi"))
   input_ids <- split_input_ids(input_ids)
 
   col <- switch(
     id_type,
+    lab_id = "Lab_ID",
     hmdb = "HMDB_ID",
     kegg = "KEGG_ID",
     inchi = "INCHI_ID"
@@ -34,17 +35,34 @@ map_input_metabolites <- function(input_ids, metabolites, id_type) {
 
   query_key <- if (id_type == "inchi") input_ids else toupper(input_ids)
   db_key <- if (id_type == "inchi") metabolites[[col]] else toupper(metabolites[[col]])
-  idx <- match(query_key, db_key)
+  rows <- lapply(seq_along(input_ids), function(i) {
+    idx <- which(!is.na(db_key) & nzchar(db_key) & db_key == query_key[i])
+    if (length(idx) == 0) {
+      return(data.frame(
+        Input_ID = input_ids[i],
+        ID_Type = id_type,
+        Match_Key = query_key[i],
+        Matched = FALSE,
+        Metabolite_ID = NA_character_,
+        Metabolite_Name = NA_character_,
+        Matched_ID = NA_character_,
+        stringsAsFactors = FALSE
+      ))
+    }
 
-  data.frame(
-    Input_ID = input_ids,
-    ID_Type = id_type,
-    Matched = !is.na(idx),
-    Metabolite_ID = ifelse(is.na(idx), NA_character_, metabolites$Lab_ID[idx]),
-    Metabolite_Name = ifelse(is.na(idx), NA_character_, metabolites$Metabolite_Name[idx]),
-    Matched_ID = ifelse(is.na(idx), NA_character_, metabolites[[col]][idx]),
-    stringsAsFactors = FALSE
-  )
+    data.frame(
+      Input_ID = input_ids[i],
+      ID_Type = id_type,
+      Match_Key = query_key[i],
+      Matched = TRUE,
+      Metabolite_ID = metabolites$Lab_ID[idx],
+      Metabolite_Name = metabolites$Metabolite_Name[idx],
+      Matched_ID = metabolites[[col]][idx],
+      stringsAsFactors = FALSE
+    )
+  })
+
+  do.call(rbind, rows)
 }
 
 build_module_sets <- function(edges, member_types = c("core", "supporting")) {
@@ -53,8 +71,22 @@ build_module_sets <- function(edges, member_types = c("core", "supporting")) {
   split(edges$Metabolite_ID, edges$Module_ID)
 }
 
+metabolite_match_keys <- function(metabolite_ids, metabolites, id_type) {
+  col <- switch(
+    id_type,
+    lab_id = "Lab_ID",
+    hmdb = "HMDB_ID",
+    kegg = "KEGG_ID",
+    inchi = "INCHI_ID"
+  )
+  ids <- unique(metabolite_ids)
+  matched <- metabolites[match(ids, metabolites$Lab_ID), , drop = FALSE]
+  keys <- if (id_type == "inchi") matched[[col]] else toupper(matched[[col]])
+  unique(clean_ids(keys))
+}
+
 run_module_enrichment <- function(input_ids,
-                                  id_type = c("hmdb", "kegg", "inchi"),
+                                  id_type = c("lab_id", "hmdb", "kegg", "inchi"),
                                   method = c("fisher", "hypergeometric"),
                                   entity_dir = file.path("2_data", "tidy_entity"),
                                   relationship_dir = file.path("2_data", "tidy_relationship"),
@@ -73,20 +105,34 @@ run_module_enrichment <- function(input_ids,
   if (length(missing_edges) > 0) stop("edges_metabolite_module.csv missing columns: ", paste(missing_edges, collapse = ", "))
 
   input_map <- map_input_metabolites(input_ids, metabolites, id_type)
-  background <- unique(edges$Metabolite_ID)
-  matched_ids <- unique(input_map$Metabolite_ID[input_map$Matched & input_map$Metabolite_ID %in% background])
 
+  # Background is restricted to metabolites that are actually assignable to
+  # at least one module under member_types (core/supporting by default), not
+  # every metabolite that appears anywhere in the edge table. Metabolites
+  # that only ever show up as "contextual" can never be counted as an
+  # overlap hit for any module, so including them in the background would
+  # pad every module's true-negative count and mechanically inflate both
+  # enrichment ratios and significance without reflecting real signal.
   module_sets <- build_module_sets(edges, member_types = member_types)
-  bg_size <- length(background)
-  input_size <- length(matched_ids)
+  background <- unique(unlist(module_sets, use.names = FALSE))
+  background_keys <- metabolite_match_keys(background, metabolites, id_type)
+  input_keys <- unique(input_map$Match_Key[input_map$Matched & input_map$Match_Key %in% background_keys])
+
+  bg_size <- length(background_keys)
+  input_size <- length(input_keys)
 
   rows <- lapply(names(module_sets), function(module_id) {
     module_metabolites <- unique(module_sets[[module_id]])
     module_metabolites <- module_metabolites[module_metabolites %in% background]
-    overlap_ids <- intersect(matched_ids, module_metabolites)
+    module_keys <- metabolite_match_keys(module_metabolites, metabolites, id_type)
+    overlap_keys <- intersect(input_keys, module_keys)
+    overlap_ids <- unique(input_map$Metabolite_ID[
+      input_map$Match_Key %in% overlap_keys &
+        input_map$Metabolite_ID %in% module_metabolites
+    ])
 
-    a <- length(overlap_ids)
-    module_size <- length(module_metabolites)
+    a <- length(overlap_keys)
+    module_size <- length(module_keys)
     b <- input_size - a
     c <- module_size - a
     d <- bg_size - module_size - b
@@ -101,6 +147,8 @@ run_module_enrichment <- function(input_ids,
 
     hit <- metabolites[match(overlap_ids, metabolites$Lab_ID), , drop = FALSE]
     edge_hit <- edges[edges$Module_ID == module_id & edges$Metabolite_ID %in% overlap_ids, , drop = FALSE]
+    core_keys <- metabolite_match_keys(edge_hit$Metabolite_ID[edge_hit$Type == "core"], metabolites, id_type)
+    supporting_keys <- metabolite_match_keys(edge_hit$Metabolite_ID[edge_hit$Type == "supporting"], metabolites, id_type)
 
     data.frame(
       Module_ID = module_id,
@@ -108,8 +156,8 @@ run_module_enrichment <- function(input_ids,
       Background_N = bg_size,
       Module_Set_Size = module_size,
       Overlap_N = a,
-      Core_Overlap_N = sum(edge_hit$Type == "core"),
-      Supporting_Overlap_N = sum(edge_hit$Type == "supporting"),
+      Core_Overlap_N = length(intersect(overlap_keys, core_keys)),
+      Supporting_Overlap_N = length(intersect(overlap_keys, supporting_keys)),
       P_Value = p_value,
       Enrichment_Ratio = ifelse(input_size == 0 || module_size == 0, NA_real_, (a / input_size) / (module_size / bg_size)),
       Overlap_Metabolite_IDs = collapse_text(overlap_ids),

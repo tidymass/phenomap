@@ -1,0 +1,109 @@
+{
+  "_comment": "Single source of truth for PhenoMAP's own product information. The five About pages (frontend/src/views/about/*.vue) render from this file, and the chat-service's PRODUCT_FACTS (chat-service/prompts.py, loaded via chat-service/product_facts.py) is generated from this same file -- so PhenoMAP Chat's answers about PhenoMAP itself can never drift from what the site actually shows. Edit this file, not the .vue files or prompts.py, when this information changes.",
+
+  "identity": {
+    "chatbot_name": "PhenoMAP Chat",
+    "main_job": "help users explore PhenoMAP's phenotype-metabolite-module knowledge graph through entity lookup, graph relationship retrieval, path queries, module enrichment, and evidence-linked summaries"
+  },
+
+  "introduction": {
+    "hero_tagline": "PhenoMAP organizes public human metabolomics studies into a searchable, phenotype-centered knowledge graph.",
+    "overview_heading": "A Queryable Graph For Metabolic Modules.",
+    "overview_paragraphs": [
+      "PhenoMAP organizes dysregulated metabolic modules across public human metabolomics studies into a single queryable graph.",
+      "FeatureMAP outputs and Metabolomics Workbench metadata are transformed into Study, Phenotype, Module, and Metabolite nodes, with relationships that preserve study context, phenotype labels, module membership, and cross-study module similarity.",
+      "The Go API serves search, path, and enrichment queries against Neo4j. The enrichment endpoint calls back into the original R analysis function directly, so the statistical method is not reimplemented in the web layer."
+    ],
+    "graph_structure": [
+      { "label": "Entities", "value": "Study, Phenotype, Module, and Metabolite" },
+      { "label": "Relationships", "value": "Study context, phenotype links, module membership, and similarity edges" },
+      { "label": "Graph Store", "value": "Neo4j knowledge graph served through the PhenoMAP API" }
+    ],
+    "pipeline_steps": [
+      {
+        "number": "01",
+        "title": "Prepare Raw Data",
+        "body": "Metabolomics Workbench metadata and per-study FeatureMAP outputs are standardized before graph construction."
+      },
+      {
+        "number": "02",
+        "title": "Tidy Entities",
+        "body": "Studies, phenotypes, modules, and metabolites are normalized into graph-ready node tables."
+      },
+      {
+        "number": "03",
+        "title": "Build Relationships",
+        "body": "Relationship tables connect studies, phenotypes, modules, and metabolites, including cross-study module similarity."
+      },
+      {
+        "number": "04",
+        "title": "Serve Analysis",
+        "body": "The web interface queries Neo4j through the Go API for entity search, path query, and module enrichment."
+      }
+    ]
+  },
+
+  "chatbot_mechanism": {
+    "heading": "How PhenoMAP Chat works",
+    "paragraphs": [
+      "PhenoMAP Chat is a tool-calling assistant, not a text search over documents. For questions about PhenoMAP's own data (an entity, a relationship, an enrichment result), it calls the same search / node-detail / path / enrichment operations that power this website, reads the real results, and answers only from what those calls returned, citing each entity's Lab_ID.",
+      "For questions about PhenoMAP Chat or the PhenoMAP project itself, it does not call those tools -- it answers directly from PhenoMAP's own published product information (this same data)."
+    ]
+  },
+
+  "authors": {
+    "intro": "PhenoMAP is developed by researchers at Lee Kong Chian School of Medicine, Nanyang Technological University.",
+    "faculty": [
+      { "slug": "xiaotao-shen", "name": "Xiaotao Shen", "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU", "email": "xiaotao.shen@ntu.edu.sg" },
+      { "slug": "chuchu-wang", "name": "Chuchu Wang", "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU", "email": "chuchu.wang@ntu.edu.sg" }
+    ],
+    "students": [
+      { "slug": "yuting-wang", "name": "Yuting Wang", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "yuting012@e.ntu.edu.sg" },
+      { "slug": "feifan-zhang", "name": "Feifan Zhang", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "feifan004@e.ntu.edu.sg" },
+      { "slug": "yijiang-liu", "name": "Yijiang Liu", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "liuy0292@e.ntu.edu.sg" },
+      { "slug": "jiramet-kinchagawat", "name": "Jiramet Kinchagawat", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "jiramet001@e.ntu.edu.sg" }
+    ]
+  },
+
+  "citation": {
+    "intro": "Please cite the PhenoMAP manuscript when using the resource, graph data, or analysis workflows.",
+    "manuscript_title": "FeatureMAP enables unbiased discovery and interpretation of dysregulated metabolic modules from untargeted metabolomics",
+    "authors": [
+      { "name": "Yuting Wang", "mark": "equal" },
+      { "name": "Feifan Zhang", "mark": "equal" },
+      { "name": "Yijiang Liu", "mark": null },
+      { "name": "Jiramet Kinchagawat", "mark": null },
+      { "name": "Chuchu Wang", "mark": null },
+      { "name": "Xiaotao Shen", "mark": "corresponding" }
+    ],
+    "metadata": [
+      { "label": "Journal", "value": "To be added" },
+      { "label": "Year", "value": "To be added" },
+      { "label": "DOI", "value": "To be added" }
+    ],
+    "note": "Future PhenoMAP-related publications will be added to this page when available."
+  },
+
+  "version": {
+    "current_version": "v0.1.0-dev",
+    "release_date": "2026-07-31",
+    "graph_scope": [
+      { "label": "Studies", "value": "174" },
+      { "label": "Phenotypes", "value": "138" },
+      { "label": "Modules", "value": "2,438" },
+      { "label": "Metabolites", "value": "9,730" }
+    ],
+    "release_notes": [
+      { "title": "Initial PhenoMAP release", "body": "First public development build of the PhenoMAP knowledge graph and web interface." },
+      { "title": "Graph-backed exploration", "body": "Includes searchable Study, Phenotype, Module, and Metabolite entities with relationship-level browsing." },
+      { "title": "Analysis workflows", "body": "Supports entity search, endpoint path query, and module enrichment workflows against the current graph scope." }
+    ],
+    "note": "Future PhenoMAP release updates will be added to this page when available."
+  },
+
+  "contact": {
+    "intro": "Questions about data, methods, collaboration, or access can be sent directly to the project team.",
+    "form_intro": "Use this form for dataset questions, technical issues, and collaboration requests.",
+    "address": "Experimental Medicine Building, 59 Nanyang Drive, Singapore 636921"
+  }
+}

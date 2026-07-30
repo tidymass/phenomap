@@ -1,5 +1,10 @@
 # Generate PhenoMAP module entity table.
 #
+# Requires: nodes_study.csv and nodes_metabolite.csv must already exist in
+# output_dir -- run 01_tidy_study_entity.R and 03_tidy_metabolite_entity.R
+# first. (anchor/supporting/contextual_metabolite_ids reference metabolites
+# by their PhenoMAP Lab_ID, so that mapping has to exist before this runs.)
+#
 # Output:
 #   nodes_module.csv
 
@@ -28,6 +33,35 @@ read_study_id_map <- function(path) {
     stop("nodes_study.csv must contain Lab_ID and Accession.")
   }
   setNames(study$Lab_ID, study$Accession)
+}
+
+# Maps a metabolite's INCHI_ID to its PhenoMAP Lab_ID, so the module entity
+# table can reference metabolites the same way the rest of the graph does.
+# Requires nodes_metabolite.csv to already exist -- run
+# 03_tidy_metabolite_entity.R before this script.
+read_metabolite_id_map <- function(path) {
+  if (!file.exists(path)) {
+    stop(
+      "nodes_metabolite.csv not found at ", path, ". ",
+      "Run 03_tidy_metabolite_entity.R before 04_tidy_module_entity.R."
+    )
+  }
+  metabolites <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  if (!all(c("Lab_ID", "INCHI_ID") %in% colnames(metabolites))) {
+    stop("nodes_metabolite.csv must contain Lab_ID and INCHI_ID.")
+  }
+  metabolites <- metabolites[!is.na(metabolites$INCHI_ID) & nzchar(metabolites$INCHI_ID), , drop = FALSE]
+  setNames(metabolites$Lab_ID, metabolites$INCHI_ID)
+}
+
+# Translates a vector of INCHI_IDs to PhenoMAP Lab_IDs via metabolite_id_map,
+# silently dropping any INCHI_ID that has no matching metabolite (shouldn't
+# happen in practice, since these IDs come from the module's own metabolite
+# table, but stays defensive rather than erroring the whole build).
+translate_metabolite_ids <- function(inchi_ids, metabolite_id_map) {
+  if (length(inchi_ids) == 0) return(character(0))
+  lab_ids <- unname(metabolite_id_map[inchi_ids])
+  lab_ids[!is.na(lab_ids) & nzchar(lab_ids)]
 }
 
 drop_empty <- function(x) {
@@ -83,7 +117,7 @@ pathway_ids_for_module <- function(pathway_coverage, source, module_id, pathway_
   collapse_ids(matched_ids)
 }
 
-build_module_entity_one_case <- function(case_dir, study_id_map) {
+build_module_entity_one_case <- function(case_dir, study_id_map, metabolite_id_map) {
   accession <- basename(case_dir)
   study_lab_id <- unname(study_id_map[accession])
   if (length(study_lab_id) == 0 || is.na(study_lab_id) || !nzchar(study_lab_id)) {
@@ -113,9 +147,14 @@ build_module_entity_one_case <- function(case_dir, study_id_map) {
       top_ids <- setdiff(intersect(split_ids(module_function$top_metabolite_ids[[i]]), all_ids), anchor_ids)
       contextual_ids <- setdiff(all_ids, union(anchor_ids, top_ids))
 
-      module_function$top_metabolite_ids[[i]] <- collapse_ids(top_ids)
+      # anchor/supporting/contextual *_ids columns store PhenoMAP Lab_IDs
+      # (not raw INCHI_IDs), matching how the rest of the graph references
+      # metabolites. *_metabolites (name) columns still look names up by the
+      # original INCHI_ID, since local_table is keyed on INCHI_ID.
+      module_function$anchor_metabolite_ids[[i]] <- collapse_ids(translate_metabolite_ids(anchor_ids, metabolite_id_map))
+      module_function$top_metabolite_ids[[i]] <- collapse_ids(translate_metabolite_ids(top_ids, metabolite_id_map))
       module_function$top_metabolites[[i]] <- names_for_ids(top_ids, local_table)
-      module_function$contextual_metabolite_ids[[i]] <- collapse_ids(contextual_ids)
+      module_function$contextual_metabolite_ids[[i]] <- collapse_ids(translate_metabolite_ids(contextual_ids, metabolite_id_map))
       module_function$contextual_metabolites[[i]] <- names_for_ids(contextual_ids, local_table)
       module_function$hmdb_pathway_ids[[i]] <- pathway_ids_for_module(
         pathway_coverage,
@@ -160,10 +199,16 @@ build_module_entity <- function(
   output_dir = file.path("2_data", "tidy_entity")
 ) {
   study_id_map <- read_study_id_map(file.path(output_dir, "nodes_study.csv"))
+  metabolite_id_map <- read_metabolite_id_map(file.path(output_dir, "nodes_metabolite.csv"))
   case_dirs <- list.dirs(case_root, recursive = FALSE, full.names = TRUE)
   case_dirs <- case_dirs[file.exists(file.path(case_dirs, "anno_result", "res_sig.rda"))]
 
-  rows <- lapply(case_dirs, build_module_entity_one_case, study_id_map = study_id_map)
+  rows <- lapply(
+    case_dirs,
+    build_module_entity_one_case,
+    study_id_map = study_id_map,
+    metabolite_id_map = metabolite_id_map
+  )
   rows <- rows[vapply(rows, function(x) is.data.frame(x) && nrow(x) > 0, logical(1))]
 
   if (length(rows) == 0) {
