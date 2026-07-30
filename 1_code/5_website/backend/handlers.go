@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -157,6 +159,17 @@ func handleChatQuota(authDB *AuthDB) http.HandlerFunc {
 }
 
 // POST /api/chat
+//
+// Streams the response as newline-delimited JSON (NDJSON): the Python
+// chat-service now runs a 3-stage pipeline (relevance check, intent
+// classification, execution) and emits one progress line per stage/tool
+// call plus exactly one terminal line (see chat-service/main.py). This
+// handler proxies each line to the browser as it arrives instead of
+// buffering the whole turn the way it used to, which is what lets the
+// frontend show short "thinking" hints instead of a static spinner. The one
+// place this handler still touches the payload is the terminal line: the
+// daily-quota count (computed here, not by the Python service) gets merged
+// in only there, not into every progress line.
 func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -171,8 +184,10 @@ func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
 
 		// LLM tool-calling loops are slower than a single DB query or even
 		// the enrichment call -- give this the longest timeout of any
-		// handler in this file.
-		ctx, cancel := context.WithTimeout(r.Context(), 70*time.Second)
+		// handler in this file. Bumped alongside ChatClient's own timeout
+		// (see chat.go) now that a turn runs 3 sequential pipeline stages
+		// instead of one.
+		ctx, cancel := context.WithTimeout(r.Context(), 100*time.Second)
 		defer cancel()
 
 		var quota *ChatQuota
@@ -198,25 +213,62 @@ func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
 			}
 		}
 
-		result, err := client.Run(ctx, req)
+		resp, err := client.Stream(ctx, req)
 		if err != nil {
 			log.Printf("chat error: %v", err)
 			writeError(w, http.StatusBadGateway, "chat service failed: "+err.Error())
 			return
 		}
+		defer resp.Body.Close()
 
-		if quota != nil {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		flusher, canFlush := w.(http.Flusher)
+
+		reader := bufio.NewReaderSize(resp.Body, 1024)
+		for {
+			line, err := reader.ReadBytes('\n')
+			if err != nil && !errors.Is(err, io.EOF) {
+				log.Printf("chat stream read error: %v", err)
+				return
+			}
+			line = []byte(strings.TrimRight(string(line), "\r\n"))
+			if len(line) == 0 {
+				if errors.Is(err, io.EOF) {
+					return
+				}
+				continue
+			}
+			out := line
 			var payload map[string]any
-			if err := json.Unmarshal(result, &payload); err == nil {
-				payload["quota"] = *quota
-				writeJSON(w, http.StatusOK, payload)
+			if err := json.Unmarshal(line, &payload); err == nil {
+				if t, _ := payload["type"].(string); t == "status" || t == "token" || t == "final" || t == "error" {
+					payload["proxy_time"] = float64(time.Now().UnixNano()) / 1e9
+					if quota != nil && (t == "final" || t == "error") {
+						payload["quota"] = *quota
+					}
+					if reEncoded, err := json.Marshal(payload); err == nil {
+						out = reEncoded
+					}
+				}
+			}
+			if _, err := w.Write(out); err != nil {
+				log.Printf("chat stream write error: %v", err)
+				return
+			}
+			if _, err := w.Write([]byte("\n")); err != nil {
+				return
+			}
+			if canFlush {
+				flusher.Flush()
+			}
+			if errors.Is(err, io.EOF) {
 				return
 			}
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(result)
 	}
 }
 

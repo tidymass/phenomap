@@ -54,17 +54,27 @@ const nodeDetailQuery = `
 // neighborsQuery returns a capped list of neighbors. neighbor_name is
 // computed with coalesce() across every label's natural-name field, so
 // the frontend doesn't need per-label logic to render a readable link.
-// Within each relationship type, rows are ordered by Similarity_Score
-// (SIMILAR_TO edges) descending, so the strongest matches surface first --
-// coalesced to -1 so relationship types without that property (i.e.
-// everything else) are unaffected and just keep Neo4j's scan order.
+// Within each relationship type, rows are ordered by:
+//  1. r.Type membership tier (core < supporting < contextual < anything
+//     else/absent) -- this only exists on Metabolite<->Module MEMBER_OF
+//     edges (see 02_tidy_metabolite_module_relationship.R), and is what
+//     lets a metabolite's module list surface its core/supporting
+//     memberships first when the list is longer than neighborCap/
+//     neighbor_limit can show; contextual memberships are the ones that
+//     get pushed out of a capped list, not a random subset of all three.
+//  2. Similarity_Score (SIMILAR_TO edges) descending, so the strongest
+//     matches surface first -- coalesced to -1 so relationship types
+//     without either property are unaffected and just keep Neo4j's scan
+//     order.
 const neighborsQuery = `
 	MATCH (n {Lab_ID: $id})-[r]-(m)
 	WHERE $label IN labels(n)
 	RETURN type(r) AS rel_type, properties(r) AS rel_props, labels(m)[0] AS neighbor_label,
 	       m.Lab_ID AS neighbor_id,
 	       coalesce(m.Accession, m.Phenotype, m.title, m.module_id, m.Metabolite_Name, '') AS neighbor_name
-	ORDER BY rel_type, coalesce(r.Similarity_Score, -1) DESC
+	ORDER BY rel_type,
+	         CASE r.Type WHEN 'core' THEN 0 WHEN 'supporting' THEN 1 WHEN 'contextual' THEN 2 ELSE 3 END,
+	         coalesce(r.Similarity_Score, -1) DESC
 	LIMIT $cap
 `
 

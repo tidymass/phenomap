@@ -13,8 +13,9 @@ import (
 // ChatHistoryTurn/ChatRequest mirror the JSON body the Python chat-service
 // expects at POST /chat (see chat-service/main.py).
 type ChatHistoryTurn struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role              string         `json:"role"`
+	Content           string         `json:"content"`
+	PendingResolution map[string]any `json:"pending_resolution,omitempty"`
 }
 
 type ChatRequest struct {
@@ -49,15 +50,24 @@ type ChatClient struct {
 func NewChatClient() *ChatClient {
 	return &ChatClient{
 		baseURL: getenv("CHAT_SERVICE_URL", "http://127.0.0.1:8788"),
-		// A tool-calling turn can involve several LLM round trips plus
-		// several backend calls (one of which, enrichment, already has its
-		// own 30s budget) -- give this the longest timeout of any client
-		// in this package.
-		http: &http.Client{Timeout: 60 * time.Second},
+		// A turn now runs a 3-stage pipeline (relevance check, intent
+		// classification, then execution's own tool-calling loop) instead of
+		// one big loop, which is a couple more sequential LLM round trips
+		// than before on top of however many backend calls execution makes
+		// -- bumped from 60s to give that extra latency headroom. This is
+		// also why /chat streams progressively now (see Stream below)
+		// rather than making the caller wait the full budget in silence.
+		http: &http.Client{Timeout: 90 * time.Second},
 	}
 }
 
-func (c *ChatClient) Run(ctx context.Context, req ChatRequest) (json.RawMessage, error) {
+// Stream sends the chat request and returns the raw HTTP response for the
+// caller to read as newline-delimited JSON and close when done, instead of
+// buffering the whole body first the way Run used to. This is what lets
+// handleChat proxy each pipeline stage's progress line to the browser as it
+// arrives, rather than the browser seeing nothing until the entire turn
+// (relevance check + intent classification + every tool call) has finished.
+func (c *ChatClient) Stream(ctx context.Context, req ChatRequest) (*http.Response, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -73,14 +83,10 @@ func (c *ChatClient) Run(ctx context.Context, req ChatRequest) (json.RawMessage,
 	if err != nil {
 		return nil, fmt.Errorf("call chat service (is it running on %s?): %w", c.baseURL, err)
 	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read chat response: %w", err)
-	}
 	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("chat service returned %d: %s", resp.StatusCode, string(respBody))
 	}
-	return respBody, nil
+	return resp, nil
 }

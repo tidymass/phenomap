@@ -62,10 +62,21 @@ func main() {
 
 	addr := ":" + getenv("PORT", "8080")
 	srv := &http.Server{
-		Addr:         addr,
-		Handler:      withCORS(mux),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		Addr:        addr,
+		Handler:     withCORS(mux),
+		ReadTimeout: 10 * time.Second,
+		// WriteTimeout bounds the whole handler, not just time spent
+		// physically writing bytes -- for a streaming handler like
+		// handleChat (see handlers.go), that's the entire 3-stage pipeline
+		// (relevance check + intent classification + execution's own
+		// tool-calling loop against Neo4j and the LLM), which can easily
+		// run well past what used to be a comfortable margin for this
+		// server's other, single-query endpoints. 15s was already tight for
+		// chat's old single-loop design and is routinely exceeded by the
+		// new pipeline; raised well above ChatClient's own 90s budget (see
+		// chat.go) so the server doesn't kill the connection out from under
+		// a request handleChat's own timeout would otherwise have let run.
+		WriteTimeout: 120 * time.Second,
 	}
 
 	log.Printf("phenomap-web backend listening on %s (neo4j db=%s)", addr, db.database)
