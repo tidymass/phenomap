@@ -377,49 +377,52 @@ async function submitDeleteAccount() {
 .account-page {
   min-height: calc(100vh - 69px);
   overflow-x: hidden;
-  background:
-    linear-gradient(180deg, rgba(247, 249, 252, 0.96), rgba(242, 245, 249, 0.98)),
-    repeating-linear-gradient(90deg, rgba(27, 45, 70, 0.035) 0, rgba(27, 45, 70, 0.035) 1px, transparent 1px, transparent 88px);
+  background: #f7f8fa;
   color: #17202e;
 }
 
 .eyebrow {
+  display: inline-block;
   margin: 0;
-  color: #2d5b88;
-  font-size: 12px;
+  color: #8fd7ea;
+  background: rgba(34, 211, 238, 0.12);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12.5px;
   font-weight: 800;
-  letter-spacing: 0;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .account-shell {
-  width: calc(100% - 128px);
-  max-width: 1600px;
-  margin: 48px auto 88px;
+  width: calc(100% - 80px);
+  max-width: 1200px;
+  margin: 38px auto 88px;
   padding: 0;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: 330px minmax(0, 1fr);
   align-items: stretch;
   background: #ffffff;
-  border: 1px solid #d9e1eb;
-  border-radius: 8px;
-  box-shadow: 0 22px 50px rgba(25, 42, 70, 0.08);
+  border: 1px solid #e3ebef;
+  border-radius: 0;
+  box-shadow: none;
   overflow: visible;
 }
 
 /* ---------- left rail ---------- */
 .account-sidebar {
   min-width: 0;
-  background: #fbfcfe;
-  border-right: 1px solid #d9e1eb;
+  background: #f8fbfc;
+  border-right: 1px solid #e3ebef;
 }
 .identity-block {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
   gap: 16px;
   align-items: center;
-  padding: 26px 24px 24px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 24px;
+  border-bottom: 1px solid #e3ebef;
 }
 .identity-avatar {
   width: 56px;
@@ -427,12 +430,12 @@ async function submitDeleteAccount() {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #1f3b57;
+  background: #0f7c96;
   color: #f8fbff;
   font-size: 20px;
   font-weight: 850;
   letter-spacing: 0;
-  box-shadow: inset 0 -10px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: none;
 }
 .identity-name {
   margin: 0;
@@ -453,14 +456,14 @@ async function submitDeleteAccount() {
 .status-grid {
   display: grid;
   grid-template-columns: 1fr;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e3ebef;
 }
 .status-grid div {
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);
   gap: 18px;
   padding: 14px 24px;
-  border-top: 1px solid #edf1f6;
+  border-top: 1px solid #e9eff2;
 }
 .status-grid div:first-child {
   border-top: 0;
@@ -481,7 +484,7 @@ async function submitDeleteAccount() {
   overflow-wrap: anywhere;
 }
 .status-grid .status-verified {
-  color: #167142;
+  color: #168557;
 }
 .status-grid .status-unverified {
   color: #a64b15;
@@ -502,7 +505,7 @@ async function submitDeleteAccount() {
   padding: 11px 12px;
   border: none;
   border-left: 3px solid transparent;
-  border-radius: 6px;
+  border-radius: 0;
   background: transparent;
   color: #46566d;
   cursor: pointer;
@@ -510,12 +513,12 @@ async function submitDeleteAccount() {
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 .nav-item:hover {
-  background: #f5f7fa;
+  background: #eef8fa;
 }
 .nav-item.active {
-  border-left-color: #2d5b88;
-  background: #edf4fa;
-  color: #1f4d77;
+  border-left-color: #0f7c96;
+  background: #e9f7f9;
+  color: #0f7c96;
 }
 .nav-item.danger.active {
   border-left-color: #b42318;
@@ -546,7 +549,7 @@ async function submitDeleteAccount() {
   margin-top: 2px;
 }
 .nav-item.active .nav-hint {
-  color: #597693;
+  color: #4d7f8a;
 }
 .nav-item.danger.active .nav-hint {
   color: #c97e78;
@@ -555,12 +558,12 @@ async function submitDeleteAccount() {
 /* ---------- settings content ---------- */
 .settings-content {
   min-width: 0;
-  padding: 42px 56px 56px;
+  padding: 38px 46px 52px;
 }
 .content-head {
   margin-bottom: 0;
-  padding-bottom: 26px;
-  border-bottom: 1px solid #d9e1eb;
+  padding-bottom: 22px;
+  border-bottom: 1px solid #e3ebef;
 }
 .content-head h1 {
   margin: 0;
@@ -585,15 +588,15 @@ async function submitDeleteAccount() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 36px 0 28px;
-  border-bottom: 1px solid #e4eaf1;
+  padding: 30px 0 22px;
+  border-bottom: 1px solid #e5eaee;
   background: transparent;
 }
 .settings-panel h2 {
   margin: 0;
   color: #152238;
-  font-size: 28px;
-  font-weight: 860;
+  font-size: 24px;
+  font-weight: 800;
   letter-spacing: 0;
 }
 .danger-panel h2 {
@@ -602,9 +605,9 @@ async function submitDeleteAccount() {
 .panel-code {
   flex: 0 0 auto;
   padding: 5px 8px;
-  border-radius: 4px;
-  background: #eef3f7;
-  color: #607089;
+  border-radius: 0;
+  background: #eef4f7;
+  color: #536172;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 800;
@@ -648,9 +651,9 @@ async function submitDeleteAccount() {
   width: 100%;
   min-height: 44px;
   padding: 11px 12px;
-  border: 1px solid #cfd9e5;
-  border-radius: 6px;
-  background: #fbfcfe;
+  border: 1px solid #d8e5ea;
+  border-radius: 8px;
+  background: #fbfdfe;
   color: #17202e;
   font: inherit;
   font-size: 15px;
@@ -661,9 +664,9 @@ async function submitDeleteAccount() {
   width: 100%;
   min-height: 44px;
   padding: 11px 12px;
-  border: 1px solid #cfd9e5;
-  border-radius: 6px;
-  background: #fbfcfe;
+  border: 1px solid #d8e5ea;
+  border-radius: 8px;
+  background: #fbfdfe;
   color: #17202e;
   font: inherit;
   font-size: 15px;
@@ -673,9 +676,9 @@ async function submitDeleteAccount() {
 .settings-form input:focus,
 .settings-form :deep(.country-input:focus) {
   outline: none;
-  border-color: #2d5b88;
+  border-color: #0f7c96;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(45, 91, 136, 0.12);
+  box-shadow: 0 0 0 3px rgba(15, 124, 150, 0.12);
 }
 .danger-panel input:focus,
 .danger-panel :deep(.country-input:focus) {
@@ -701,17 +704,17 @@ async function submitDeleteAccount() {
   transition: background 0.16s ease, border-color 0.16s ease;
 }
 .btn-primary {
-  border: 1px solid #1f4d77;
-  background: #1f4d77;
+  border: 1px solid #0f7c96;
+  background: #0f7c96;
   color: #ffffff;
 }
 .btn-primary:hover:not(:disabled) {
-  border-color: #183d5f;
-  background: #183d5f;
+  border-color: #245c7e;
+  background: #245c7e;
 }
 .btn-primary:disabled {
-  border-color: #adc1d1;
-  background: #adc1d1;
+  border-color: #a8c6cf;
+  background: #a8c6cf;
   cursor: not-allowed;
 }
 .btn-danger {
@@ -732,7 +735,7 @@ async function submitDeleteAccount() {
 .notice {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 700;
   line-height: 1.5;
@@ -752,29 +755,33 @@ async function submitDeleteAccount() {
   display: grid;
   place-items: center;
   padding: 48px 24px;
+  background:
+    radial-gradient(circle at 16% 18%, rgba(143, 215, 234, 0.3), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(79, 181, 155, 0.18), transparent 30%),
+    linear-gradient(135deg, #1d5876 0%, #2d7895 52%, #245f7d 100%);
 }
 .signed-out-state h1 {
   max-width: 760px;
-  margin: 16px 0 14px;
-  color: #111827;
-  font-size: clamp(32px, 4vw, 44px);
+  margin: 14px 0 10px;
+  color: #ffffff;
+  font-size: clamp(32px, 4vw, 42px);
   font-weight: 850;
   line-height: 1.05;
 }
 .signed-out-state p:not(.eyebrow) {
   margin: 0;
-  color: #5f6b84;
+  color: #d8e7ef;
   font-size: 16px;
   line-height: 1.65;
   font-weight: 600;
 }
 .signed-out-state > div {
   width: min(560px, 100%);
-  padding: 40px;
-  background: #ffffff;
-  border: 1px solid #d9e1eb;
-  border-radius: 8px;
-  box-shadow: 0 18px 44px rgba(27, 33, 69, 0.08);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 .signed-out-state a {
   display: inline-flex;
@@ -783,12 +790,17 @@ async function submitDeleteAccount() {
   min-height: 42px;
   margin-top: 24px;
   padding: 0 20px;
-  border-radius: 6px;
-  background: #1f4d77;
-  color: #ffffff;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  color: #0f5872;
+  box-shadow: 0 14px 28px -22px rgba(0, 0, 0, 0.55);
   font-size: 15px;
   font-weight: 850;
   text-decoration: none;
+}
+.signed-out-state a:hover {
+  background: #eef8fa;
 }
 
 @media (max-width: 1200px) {

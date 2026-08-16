@@ -2,9 +2,9 @@
   <div class="entity-search">
     <!-- ============ HEADER / CONTROLS BAND ============ -->
     <section class="es-header">
+      <AnimatedNetworkField class="analysis-network-bg" :seed="17" :node-count="22" :drift-scale="0.82" />
       <div class="es-container es-header-flex">
         <div class="es-header-left">
-        <span class="eyebrow">Analysis</span>
         <h1>Entity Search</h1>
 
         <div class="type-tabs">
@@ -204,6 +204,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { searchNodes } from '../api.js'
+import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
 import TermInfo from '../components/TermInfo.vue'
 
 const route = useRoute()
@@ -415,26 +416,38 @@ onUnmounted(() => {
   background: #f7f8fa;
 }
 .es-container {
-  max-width: 1360px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 40px;
-  width: 100%;
+  width: min(90vw, 1680px);
   box-sizing: border-box;
 }
 .es-header .es-container {
-  max-width: 1360px;
+  max-width: none;
 }
 
 /* ---------- header band ---------- */
 .es-header {
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at 16% 18%, rgba(143, 215, 234, 0.3), transparent 28%),
     radial-gradient(circle at 82% 18%, rgba(79, 181, 155, 0.18), transparent 30%),
     linear-gradient(135deg, #1d5876 0%, #2d7895 52%, #245f7d 100%);
-  padding: 56px 0 40px;
+  padding: 46px 0 38px;
   border-bottom: 0;
 }
+.analysis-network-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.7;
+  --network-line: rgba(210, 231, 244, 0.34);
+  --network-node: rgba(216, 231, 239, 0.92);
+  --network-line-width: 0.85;
+}
 .es-header-flex {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -442,19 +455,6 @@ onUnmounted(() => {
 .es-header-left {
   flex: 1;
   min-width: 0;
-}
-.eyebrow {
-  display: inline-block;
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #8fd7ea;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  padding: 5px 14px;
-  border-radius: 999px;
-  margin-bottom: 18px;
 }
 .es-header h1 {
   margin: 0 0 8px;

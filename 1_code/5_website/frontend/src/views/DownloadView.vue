@@ -196,6 +196,8 @@ onMounted(async () => {
   max-width: none;
   margin: 0 auto;
   padding: 34px 40px 32px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
   text-align: left;
 }
 .eyebrow,
@@ -233,6 +235,8 @@ onMounted(async () => {
   max-width: none;
   margin: 0 auto;
   padding: 34px 40px 88px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .download-layout {
   display: block;

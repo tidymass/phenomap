@@ -1337,7 +1337,7 @@ function hideBrokenImage(event) {
 .message-row {
   display: flex;
   gap: 13px;
-  max-width: 1240px;
+  max-width: 1680px;
   margin: 0 auto 28px;
 }
 .message-row.user {
@@ -1650,7 +1650,7 @@ function hideBrokenImage(event) {
   50% { transform: scale(1); opacity: 1; }
 }
 .chat-error {
-  max-width: 1240px;
+  max-width: 1680px;
   margin: 0 auto;
   color: #b42318;
   font-weight: 700;
@@ -1668,7 +1668,7 @@ function hideBrokenImage(event) {
   padding-bottom: 32px;
 }
 .composer {
-  max-width: 1120px;
+  max-width: 1680px;
   margin: 0 auto;
   display: flex;
   align-items: flex-end;
@@ -1727,7 +1727,7 @@ function hideBrokenImage(event) {
   font-style: italic;
 }
 .ai-disclaimer {
-  max-width: 1120px;
+  max-width: 1680px;
   margin: 0 auto;
   color: #969dac;
   font-size: 12px;

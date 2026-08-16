@@ -90,9 +90,11 @@ const citationAuthorParts = citationAuthors.flatMap((a, i) => {
   border-bottom: 0;
 }
 .citation-hero-inner {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 34px 40px 32px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .eyebrow,
 .section-kicker {
@@ -125,9 +127,11 @@ const citationAuthorParts = citationAuthors.flatMap((a, i) => {
   overflow-wrap: break-word;
 }
 .citation-body {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 38px 40px 88px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .citation-record {
   background: #fff;

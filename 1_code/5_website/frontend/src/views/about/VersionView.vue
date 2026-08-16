@@ -90,9 +90,11 @@ const releaseNoteSummary = releaseNotes.map((note) => note.title).join('; ')
   border-bottom: 0;
 }
 .version-hero-inner {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 34px 40px 32px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .eyebrow,
 .section-kicker {
@@ -125,9 +127,11 @@ const releaseNoteSummary = releaseNotes.map((note) => note.title).join('; ')
   overflow-wrap: break-word;
 }
 .version-body {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 38px 40px 88px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .version-table-wrap {
   width: 100%;

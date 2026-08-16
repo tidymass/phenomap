@@ -2,8 +2,8 @@
   <div class="me">
     <!-- ============ HEADER + FORM BAND ============ -->
     <section class="me-header">
+      <AnimatedNetworkField class="analysis-network-bg" :seed="41" :node-count="22" :drift-scale="0.82" />
       <div class="me-container">
-        <span class="eyebrow">Analysis</span>
         <h1>Module Enrichment</h1>
 
         <div class="me-form">
@@ -455,6 +455,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { runEnrichment } from '../api.js'
+import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -883,36 +884,38 @@ onMounted(() => {
   background: #f7f8fa;
 }
 .me-container {
-  max-width: 1280px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 40px;
-  width: 100%;
+  width: min(90vw, 1680px);
   box-sizing: border-box;
 }
 
 /* ---------- header + form band ---------- */
 .me-header {
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(circle at 14% 20%, rgba(143, 215, 234, 0.24), transparent 28%),
     radial-gradient(circle at 86% 18%, rgba(79, 181, 155, 0.14), transparent 32%),
     linear-gradient(135deg, #123a55 0%, #245c7e 52%, #174564 100%);
-  padding: 48px 0 36px;
+  padding: 44px 0 34px;
   border-bottom: 0;
 }
-.eyebrow {
-  display: inline-block;
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #8fd7ea;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  padding: 5px 14px;
-  border-radius: 999px;
+.analysis-network-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0.7;
+  --network-line: rgba(210, 231, 244, 0.34);
+  --network-node: rgba(216, 231, 239, 0.92);
+  --network-line-width: 0.85;
+}
+.me-header .me-container {
+  position: relative;
+  z-index: 1;
 }
 .me-header h1 {
-  margin: 14px 0 26px;
+  margin: 0 0 24px;
   font-size: 36px;
   font-weight: 800;
   letter-spacing: -0.01em;

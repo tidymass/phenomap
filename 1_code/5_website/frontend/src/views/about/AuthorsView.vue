@@ -127,9 +127,11 @@ function initials(name) {
   border-bottom: 0;
 }
 .authors-hero-inner {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 34px 40px 32px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .eyebrow,
 .section-kicker {
@@ -162,9 +164,11 @@ function initials(name) {
   overflow-wrap: break-word;
 }
 .authors-body {
-  max-width: 1200px;
+  max-width: none;
   margin: 0 auto;
   padding: 44px 40px 88px;
+  width: min(90vw, 1680px);
+  box-sizing: border-box;
 }
 .author-section + .author-section {
   margin-top: 56px;

@@ -22,62 +22,149 @@
       </div>
     </section>
 
-    <section class="introduction-body">
-      <div class="introduction-layout">
-        <section class="overview-panel" aria-label="Overview">
-          <p class="section-kicker">Overview</p>
-          <h2>{{ facts.introduction.overview_heading }}</h2>
-          <p v-for="(para, i) in facts.introduction.overview_paragraphs" :key="i">{{ para }}</p>
+    <main class="about-shell">
+      <aside class="about-toc" aria-label="About introduction contents">
+        <p>Contents</p>
+        <a href="#overview">Resource Overview</a>
+        <a href="#scope">Release Content</a>
+        <a href="#graph-model">Knowledge Graph</a>
+        <a href="#construction">Data Assembly</a>
+        <a href="#analysis">Ways to Explore</a>
+        <a href="#access">Data Access</a>
+      </aside>
+
+      <article class="about-article">
+        <section id="overview" class="article-section">
+          <p class="section-kicker">Resource Overview</p>
+          <h2>A phenotype-centered resource for interpreting metabolomics studies at module scale.</h2>
+          <p>
+            PhenoMAP organizes public human metabolomics studies into a searchable knowledge graph. Rather than
+            treating each study, metabolite, or pathway result as an isolated record, PhenoMAP preserves the
+            relationships between phenotypes, studies, dysregulated modules, and the metabolites that define those
+            modules.
+          </p>
+          <p>
+            The goal is to support module-level interpretation across studies: users can start from a phenotype,
+            a study accession, a metabolite, or a module title, then inspect how the matched entity is connected
+            to surrounding evidence in the graph.
+          </p>
         </section>
 
-        <aside class="structure-panel" aria-label="Graph structure">
-          <p class="section-kicker">Graph Structure</p>
-          <dl class="structure-list">
-            <div v-for="item in graphStructure" :key="item.label" class="structure-row">
-              <dt>{{ item.label }}</dt>
-              <dd>{{ item.value }}</dd>
+        <section id="scope" class="article-section">
+          <p class="section-kicker">Release Content</p>
+          <h2>What is included in the current PhenoMAP graph.</h2>
+          <p>
+            The current development release contains <strong>{{ scopeText }}</strong>. These counts describe the
+            public graph currently served by the PhenoMAP web interface and will be updated as additional studies
+            and reviewed submissions are incorporated.
+          </p>
+        </section>
+
+        <section id="graph-model" class="article-section">
+          <p class="section-kicker">Knowledge Graph</p>
+          <h2>How phenotype context is connected to studies, modules, and metabolites.</h2>
+          <p>
+            The graph centers on four entity types. Phenotypes provide the biological or disease context, studies
+            provide the experimental source, modules summarize coordinated metabolic dysregulation, and metabolites
+            provide the molecular membership layer.
+          </p>
+          <figure class="schema-figure">
+            <img src="/phenomap.png" alt="PhenoMAP knowledge graph schema" />
+            <figcaption>
+              The schema links studies to normalized phenotypes, modules to the studies in which they were identified,
+              and metabolites to their corresponding modules. Similarity relationships connect modules with related
+              metabolic composition or interpretation.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section id="construction" class="article-section">
+          <p class="section-kicker">Data Assembly</p>
+          <h2>How study metadata and module outputs become graph evidence.</h2>
+          <p>
+            PhenoMAP combines standardized metabolomics study metadata with FeatureMAP-derived module outputs.
+            Study-level information is normalized into graph entities, while module and metabolite tables preserve
+            the links needed to trace each module back to the study and phenotype context in which it was observed.
+          </p>
+          <dl class="definition-list">
+            <div>
+              <dt>Study metadata</dt>
+              <dd>Study design, biospecimen, sample size, phenotype label, source accession, and publication context.</dd>
+            </div>
+            <div>
+              <dt>Module evidence</dt>
+              <dd>Dysregulated metabolic modules derived from FeatureMAP outputs and connected to their study source.</dd>
+            </div>
+            <div>
+              <dt>Metabolite membership</dt>
+              <dd>Metabolites linked to modules using compound identifiers and available annotation evidence.</dd>
+            </div>
+            <div>
+              <dt>Cross-study comparison</dt>
+              <dd>Similarity edges that help users compare modules across phenotypes and study contexts.</dd>
             </div>
           </dl>
-        </aside>
-      </div>
+        </section>
 
-      <section class="pipeline-section" aria-label="Data flow">
-        <div class="section-head">
-          <p class="section-kicker">Data Flow</p>
-          <h2>From Raw Studies To Web Queries</h2>
-        </div>
-        <ol class="pipeline-list">
-          <li v-for="step in pipelineSteps" :key="step.number">
-            <span class="step-number">{{ step.number }}</span>
-            <div>
-              <h3>{{ step.title }}</h3>
-              <p>{{ step.body }}</p>
+        <section id="analysis" class="article-section">
+          <p class="section-kicker">Ways to Explore</p>
+          <h2>Search, connect, enrich, and ask questions across the graph.</h2>
+          <dl class="definition-list">
+            <div v-for="workflow in workflows" :key="workflow.title">
+              <dt>{{ workflow.title }}</dt>
+              <dd>{{ workflow.body }}</dd>
             </div>
-          </li>
-        </ol>
-      </section>
-    </section>
+          </dl>
+        </section>
+
+        <section id="access" class="article-section">
+          <p class="section-kicker">Data Access</p>
+          <h2>Built for interactive exploration and reusable graph tables.</h2>
+          <p>
+            PhenoMAP can be explored through the website, queried through analysis pages, and downloaded as flat
+            graph tables for reuse. The web application is backed by a Neo4j graph database and a Go API for entity
+            search, relationship retrieval, path queries, and enrichment workflows.
+          </p>
+        </section>
+      </article>
+    </main>
   </div>
 </template>
 
 <script setup>
-// Single source of truth: this page (and the chat-service's PRODUCT_FACTS,
-// via chat-service/product_facts.py) both read from this same file, so the
-// PhenoMAP Chat's "how do you work" answers can never drift from what this page
-// actually shows. Edit product_facts.json, not the copy below.
 import facts from '../../data/product_facts.json'
 
-const graphStructure = facts.introduction.graph_structure
-const pipelineSteps = facts.introduction.pipeline_steps
+const scopeText = facts.version.graph_scope
+  .map((item) => `${item.value} ${item.label.toLowerCase()}`)
+  .join(', ')
+
+const workflows = [
+  {
+    title: 'Entity Search',
+    body: 'Search phenotypes, studies, modules, and metabolites, then inspect the selected graph record and its evidence.',
+  },
+  {
+    title: 'Path Query',
+    body: 'Find graph paths between two selected entities and use the returned relationships to trace biological context.',
+  },
+  {
+    title: 'Module Enrichment',
+    body: 'Submit metabolite identifiers and test which PhenoMAP modules are enriched for the submitted list.',
+  },
+  {
+    title: 'PhenoMAP Chat',
+    body: 'Ask guided questions that call the same graph tools used by the website and return cited graph records.',
+  },
+]
 </script>
 
 <style scoped>
 .introduction-page {
   min-height: calc(100vh - 69px);
-  overflow-x: hidden;
   background: #f7f8fa;
   color: #1b1f24;
 }
+
 .introduction-hero {
   background:
     radial-gradient(circle at 16% 18%, rgba(143, 215, 234, 0.3), transparent 28%),
@@ -85,23 +172,33 @@ const pipelineSteps = facts.introduction.pipeline_steps
     linear-gradient(135deg, #1d5876 0%, #2d7895 52%, #245f7d 100%);
   border-bottom: 0;
 }
-.introduction-hero-inner {
-  max-width: 1200px;
+
+.introduction-hero-inner,
+.about-shell {
+  width: min(90vw, 1680px);
+  max-width: none;
   margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.introduction-hero-inner {
   padding: 34px 40px 32px;
 }
+
 .eyebrow,
 .section-kicker {
   margin: 0;
   color: #0f7c96;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
 .introduction-hero .eyebrow {
   color: #8fd7ea;
 }
+
 .introduction-hero h1 {
   max-width: 720px;
   margin: 12px 0 8px;
@@ -111,6 +208,7 @@ const pipelineSteps = facts.introduction.pipeline_steps
   line-height: 1.06;
   letter-spacing: 0;
 }
+
 .introduction-hero p:not(.eyebrow) {
   max-width: 1100px;
   margin: 0;
@@ -118,181 +216,200 @@ const pipelineSteps = facts.introduction.pipeline_steps
   font-size: 16px;
   line-height: 1.62;
   font-weight: 600;
-  overflow-wrap: break-word;
 }
-.introduction-body {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 44px 40px 88px;
-}
-.introduction-layout {
+
+.about-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.72fr);
-  gap: 36px;
-  align-items: stretch;
+  grid-template-columns: 220px minmax(0, 1120px);
+  gap: 72px;
+  align-items: start;
+  padding: 48px 40px 92px;
 }
-.overview-panel,
-.structure-panel,
-.pipeline-section {
-  min-width: 0;
-  background: #ffffff;
-  border: 1px solid #e3ebef;
-  border-top: 3px solid #8fd7ea;
-  border-radius: 0;
+
+.about-toc {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  display: grid;
+  gap: 2px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding-top: 4px;
+  border-top: 1px solid #dfe6ee;
 }
-.overview-panel,
-.structure-panel {
-  padding: 32px;
-}
-.overview-panel h2 {
-  max-width: 660px;
-  margin: 12px 0 18px;
-  color: #111827;
-  font-size: clamp(24px, 2.5vw, 34px);
+
+.about-toc p {
+  margin: 16px 0 10px;
+  color: #8a96a8;
+  font-size: 11px;
   font-weight: 850;
-  line-height: 1.15;
-  letter-spacing: 0;
-}
-.overview-panel p:not(.section-kicker) {
-  max-width: 760px;
-  margin: 0;
-  color: #667085;
-  font-size: 15.5px;
-  font-weight: 600;
-  line-height: 1.72;
-}
-.overview-panel p:not(.section-kicker) + p {
-  margin-top: 16px;
-}
-.structure-list {
-  display: grid;
-  gap: 0;
-  margin: 24px 0 0;
-  border-top: 1px solid #e3ebef;
-}
-.structure-row {
-  padding: 20px 0;
-  border-bottom: 1px solid #e3ebef;
-}
-.structure-row dt {
-  margin: 0 0 8px;
-  color: #8292a3;
-  font-size: 11.5px;
-  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.structure-row dd {
-  margin: 0;
-  color: #293247;
-  font-size: 15px;
+
+.about-toc a {
+  display: block;
+  padding: 8px 0;
+  color: #4f5d70;
+  font-size: 14px;
   font-weight: 750;
-  line-height: 1.5;
+  line-height: 1.3;
+  text-decoration: none;
 }
-.pipeline-section {
-  margin-top: 36px;
-  padding: 32px;
-}
-.section-head {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e3ebef;
-}
-.section-head h2 {
-  margin: 8px 0 0;
-  color: #111827;
-  font-size: 30px;
-  font-weight: 850;
-  line-height: 1.12;
-  letter-spacing: 0;
-}
-.pipeline-list {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid #e3ebef;
-  border-left: 1px solid #e3ebef;
-}
-.pipeline-list li {
-  min-width: 0;
-  padding: 22px;
-  border-right: 1px solid #e3ebef;
-  border-bottom: 1px solid #e3ebef;
-  background: #fbfdfe;
-}
-.step-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  margin-bottom: 18px;
-  border-radius: 50%;
-  background: #e9f7f9;
+
+.about-toc a:hover {
   color: #0f7c96;
-  font-size: 12px;
-  font-weight: 850;
 }
-.pipeline-list h3 {
-  margin: 0 0 8px;
+
+.about-article {
+  width: 100%;
+}
+
+.article-section {
+  width: 100%;
+  padding: 0 0 42px;
+  margin: 0 0 42px;
+  border-bottom: 1px solid #dfe6ee;
+  scroll-margin-top: 24px;
+}
+
+.article-section:last-child {
+  margin-bottom: 0;
+}
+
+.article-section h2 {
+  max-width: 900px;
+  margin: 10px 0 14px;
   color: #111827;
-  font-size: 17px;
+  font-size: clamp(23px, 2vw, 29px);
   font-weight: 850;
   line-height: 1.22;
   letter-spacing: 0;
 }
-.pipeline-list p {
+
+.article-section p {
+  max-width: 900px;
+  margin: 0;
+  color: #5f6f83;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.68;
+}
+
+.article-section p + p {
+  margin-top: 14px;
+}
+
+.article-section strong {
+  color: #243247;
+  font-weight: 850;
+}
+
+.schema-figure {
+  max-width: 900px;
+  margin: 24px 0 0;
+}
+
+.schema-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e0e6ee;
+  background: #ffffff;
+}
+
+.schema-figure figcaption {
+  margin: 13px 0 0;
+  color: #667085;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.definition-list {
+  display: grid;
+  gap: 0;
+  max-width: 900px;
+  margin: 22px 0 0;
+  border-top: 1px solid #dfe6ee;
+}
+
+.definition-list div {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 32px;
+  padding: 17px 0;
+  border-bottom: 1px solid #dfe6ee;
+}
+
+.definition-list dt {
+  margin: 0;
+  color: #182033;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.definition-list dd {
   margin: 0;
   color: #667085;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.58;
-  overflow-wrap: break-word;
+  line-height: 1.62;
 }
 
-@media (max-width: 1080px) {
-  .pipeline-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 980px) {
-  .introduction-layout {
+@media (max-width: 1040px) {
+  .about-shell {
     grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .about-toc {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #dfe6ee;
+  }
+
+  .about-toc p {
+    flex-basis: 100%;
+    margin-bottom: 0;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .introduction-hero-inner {
     padding: 28px 24px 26px;
   }
+
   .introduction-hero h1 {
     font-size: 30px;
   }
-  .introduction-hero p:not(.eyebrow) {
-    max-width: 330px;
-    font-size: 15.5px;
+
+  .about-shell {
+    width: 100%;
+    padding: 30px 22px 60px;
   }
-  .introduction-body {
-    padding: 28px 20px 56px;
+
+  .article-section {
+    padding-bottom: 32px;
+    margin-bottom: 32px;
   }
-  .overview-panel,
-  .structure-panel,
-  .pipeline-section {
-    padding: 24px 22px;
+
+  .article-section h2 {
+    font-size: 23px;
   }
-  .overview-panel h2,
-  .section-head h2 {
-    font-size: 24px;
+
+  .article-section p,
+  .definition-list dd {
+    font-size: 15px;
   }
-  .pipeline-list {
+
+  .definition-list div {
     grid-template-columns: 1fr;
+    gap: 6px;
   }
 }
 </style>

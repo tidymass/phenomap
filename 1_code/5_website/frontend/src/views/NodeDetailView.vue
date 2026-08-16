@@ -155,7 +155,7 @@
             </div>
           </div>
 
-          <div class="card" id="phenotype-relationship" v-if="relationshipItems.length || studyPhenotypes.length">
+          <div class="card" id="phenotype-relationship" v-if="relationshipItems.length || studyPhenotypes.length || pmidList.length">
             <h2><TermInfo label="Phenotype Relationship" :definition="termDefinition('Phenotype Relationship')" heading /></h2>
             <dl class="props">
               <template v-if="studyPhenotypes.length">
@@ -178,24 +178,24 @@
                 </dd>
               </template>
             </dl>
-          </div>
 
-          <div class="card" id="pubmed-evidence" v-if="pmidList.length">
-            <h2><TermInfo label="PubMed Evidence" :definition="termDefinition('PubMed Evidence')" heading /></h2>
-            <div class="ref-list">
-              <a
-                v-for="pmid in pmidList"
-                :key="pmid"
-                class="ref-card"
-                :href="`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span class="ref-pmid">PMID {{ pmid }}</span>
-                <svg class="ref-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M7 17 17 7M9 7h8v8" />
-                </svg>
-              </a>
+            <div class="relationship-evidence" v-if="pmidList.length">
+              <h3><TermInfo label="PubMed Evidence" :definition="termDefinition('PubMed Evidence')" heading /></h3>
+              <div class="ref-list">
+                <a
+                  v-for="pmid in pmidList"
+                  :key="pmid"
+                  class="ref-card"
+                  :href="`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="ref-pmid">PMID {{ pmid }}</span>
+                  <svg class="ref-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M7 17 17 7M9 7h8v8" />
+                  </svg>
+                </a>
+              </div>
             </div>
           </div>
 
@@ -228,18 +228,12 @@
             <dl class="props">
               <template v-for="item in studyDesignItems" :key="item.label">
                 <dt>{{ item.label }}</dt>
-                <dd>{{ item.value }}</dd>
-              </template>
-            </dl>
-          </div>
-
-          <div class="card" id="instrumentation" v-if="studyInstrumentationItems.length">
-            <h2><TermInfo label="Instrumentation" :definition="termDefinition('Instrumentation')" heading /></h2>
-            <dl class="props">
-              <template v-for="item in studyInstrumentationItems" :key="item.label">
-                <dt>{{ item.label }}</dt>
                 <dd>
-                  <span v-if="item.label === 'MS2 Supported'" class="direction-badge" :class="item.value === 'Yes' ? 'dir-up' : 'dir-down'">{{ item.value }}</span>
+                  <span
+                    v-if="item.label === 'MS2 Supported'"
+                    class="direction-badge"
+                    :class="item.value === 'Yes' ? 'dir-up' : item.value === 'No' ? 'dir-down' : 'dir-neutral'"
+                  >{{ item.value }}</span>
                   <template v-else>{{ item.value }}</template>
                 </dd>
               </template>
@@ -501,7 +495,7 @@ const termDefinitions = {
   Phenotype: 'The phenotype, disease, condition, or biological state investigated by a study or connected to an entity.',
   'Phenotype Name': 'The normalized phenotype term linked to the study or module.',
   'Phenotype Relationship': 'A curated summary of how the module is related to the phenotype investigated by the linked study.',
-  'PubMed Evidence': 'PubMed identifiers used as literature evidence for the module interpretation.',
+  'PubMed Evidence': 'PubMed records retrieved as supporting literature evidence by searching the module name or anchor metabolites together with the connected phenotype.',
   Rationale: 'A short explanation of why the module was linked to the phenotype or assigned its interpretation.',
   'Related Modules': 'Modules connected to this phenotype through studies that investigated the phenotype.',
   'Reported In': 'The study record in which this module was reported.',
@@ -522,6 +516,30 @@ function termDefinition(labelName) {
 
 // Shorthand for the raw properties map, used throughout the Module layout.
 const p = computed(() => node.value?.properties || {})
+
+function firstProperty(...keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(p.value, key)) return p.value[key]
+  }
+  const normalized = Object.fromEntries(
+    Object.entries(p.value).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ''), value]),
+  )
+  for (const key of keys) {
+    const value = normalized[key.toLowerCase().replace(/[^a-z0-9]/g, '')]
+    if (value !== undefined) return value
+  }
+  return null
+}
+
+function formatBooleanLabel(value) {
+  if (value === null || value === undefined || value === '') return 'Not reported'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'number') return value === 1 ? 'Yes' : value === 0 ? 'No' : 'Not reported'
+  const normalized = String(value).trim().toLowerCase()
+  if (['true', 't', 'yes', 'y', '1', 'supported', 'ms2 supported'].includes(normalized)) return 'Yes'
+  if (['false', 'f', 'no', 'n', '0', 'not supported', 'unsupported'].includes(normalized)) return 'No'
+  return formatValue(value)
+}
 
 function splitList(v) {
   if (v === null || v === undefined) return []
@@ -692,18 +710,15 @@ const studyDesignItems = computed(() => {
     { label: 'Study Design', value: p.value.Study_Design },
     { label: 'Sample Size', value: p.value.Sample_Size },
     { label: 'Biospecimen', value: p.value.Biospecimen },
+    { label: 'MS2 Supported', value: studyMs2Supported.value },
+    { label: 'Chromatography', value: p.value.Chromatography },
+    { label: 'Mass Spectrometry', value: p.value.Mass_Spectrometry },
   ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '')
 })
 
-const studyInstrumentationItems = computed(() => {
-  if (!node.value || node.value.label !== 'Study') return []
-  const ms2 = p.value.MS2_Supported
-  const ms2Label = ms2 === true || ms2 === 'true' ? 'Yes' : ms2 === false || ms2 === 'false' ? 'No' : null
-  return [
-    { label: 'Chromatography', value: p.value.Chromatography },
-    { label: 'Mass Spectrometry', value: p.value.Mass_Spectrometry },
-    { label: 'MS2 Supported', value: ms2Label },
-  ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '')
+const studyMs2Supported = computed(() => {
+  if (!node.value || node.value.label !== 'Study') return ''
+  return formatBooleanLabel(firstProperty('MS2_Supported', 'ms2_supported', 'MS2 Supported', 'MS2Supported'))
 })
 
 // Study carries its investigated phenotype as free-text (Phenotype) plus a
@@ -842,8 +857,7 @@ const sections = computed(() => {
       classCoverage.value.length && { id: 'class-coverage', label: 'Class Coverage' },
       (keggPathways.value.length || hmdbPathways.value.length) && { id: 'pathway-coverage', label: 'Pathway Coverage' },
       originFracs.value && { id: 'origin', label: 'Metabolite Origin' },
-      (relationshipItems.value.length || studyPhenotypes.value.length) && { id: 'phenotype-relationship', label: 'Phenotype Relationship' },
-      pmidList.value.length && { id: 'pubmed-evidence', label: 'PubMed Evidence' },
+      (relationshipItems.value.length || studyPhenotypes.value.length || pmidList.value.length) && { id: 'phenotype-relationship', label: 'Phenotype Relationship' },
       membershipGroups.value.length && { id: 'metabolite-membership', label: 'Metabolite Membership' },
       neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
     ].filter(Boolean)
@@ -851,7 +865,6 @@ const sections = computed(() => {
   if (node.value.label === 'Study') {
     return [
       studyDesignItems.value.length && { id: 'study-design', label: 'Study Design' },
-      studyInstrumentationItems.value.length && { id: 'instrumentation', label: 'Instrumentation' },
       studyPhenotypeLink.value && { id: 'phenotype', label: 'Phenotype' },
       (studySourceItems.value.length || p.value.Link || doiUrl.value) && { id: 'source', label: 'Source & Publication' },
       neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
@@ -944,10 +957,10 @@ onBeforeUnmount(() => {
   background: #f7f8fc;
 }
 .nd-container {
-  max-width: 1360px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 40px;
-  width: 100%;
+  width: min(90vw, 1680px);
   box-sizing: border-box;
 }
 .hint,
@@ -1223,6 +1236,20 @@ h2 {
   margin: 0;
   word-break: break-word;
 }
+.relationship-evidence {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #edf1f5;
+}
+.relationship-evidence h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: #1b2145;
+  font-size: 13px;
+  font-weight: 750;
+}
 .prop-link {
   color: #3949ab;
   font-weight: 600;
@@ -1267,6 +1294,10 @@ h2 {
 .dir-down {
   background: rgba(179, 86, 44, 0.12);
   color: #b3562c;
+}
+.dir-neutral {
+  background: rgba(108, 117, 125, 0.12);
+  color: #6b7280;
 }
 /* A spacious ranked list (name + similarity bar), not a dense card grid --
    closer to how reference platforms show ranked associations. */

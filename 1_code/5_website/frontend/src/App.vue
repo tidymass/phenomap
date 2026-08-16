@@ -67,7 +67,7 @@ body {
 .app-header {
   padding: 12px 32px;
   border-bottom: 1px solid #e2e5ea;
-  background: #fff;
+  background: #f7f8fa;
   display: flex;
   align-items: center;
   gap: 30px;
@@ -93,10 +93,13 @@ body {
   margin-left: auto;
 }
 .nav-link {
-  color: #6b7280;
+  color: #536173;
   text-decoration: none;
   font-size: 17px;
   font-weight: 700;
+}
+.nav-link:hover {
+  color: #0f7c96;
 }
 .nav-link.router-link-exact-active {
   color: #0f7c96;
@@ -105,13 +108,14 @@ body {
   padding: 8px 18px;
   border-radius: 8px;
   border: 1px solid #d7dbe0;
-  background: #f7f8fa;
+  background: #fff;
   color: #0f7c96;
   font-weight: 700;
   font-size: 17px;
   text-decoration: none;
 }
 .sign-in-link:hover {
+  border-color: #b9d8e0;
   background: #e9f7f9;
 }
 .success {

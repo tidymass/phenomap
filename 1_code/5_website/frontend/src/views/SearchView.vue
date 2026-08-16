@@ -2,29 +2,7 @@
   <div class="home">
     <!-- ============ HERO ============ -->
     <section class="hero">
-      <svg class="hero-bg" viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <g class="network-lines" fill="none">
-          <line
-            v-for="(e, i) in graphEdges"
-            :key="'e' + i"
-            :x1="nodePos[e.from].x"
-            :y1="nodePos[e.from].y"
-            :x2="nodePos[e.to].x"
-            :y2="nodePos[e.to].y"
-            :opacity="e.opacity"
-          />
-        </g>
-        <g class="network-nodes">
-          <circle
-            v-for="n in graphNodes"
-            :key="n.id"
-            :cx="nodePos[n.id].x"
-            :cy="nodePos[n.id].y"
-            :r="n.r"
-            :opacity="n.opacity"
-          />
-        </g>
-      </svg>
+      <AnimatedNetworkField class="hero-bg" :seed="7" />
 
       <div class="hero-inner">
         <span class="eyebrow">Phenotype-aware Metabolic Module Atlas Portal</span>
@@ -221,111 +199,12 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, reactive, computed } from 'vue'
+import { onMounted, ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStats } from '../api.js'
+import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
 
 const router = useRouter()
-
-// Edge-weighted network field inspired by Open Targets. Nodes are seeded so
-// the layout is stable, then linked only to nearby neighbors to avoid long,
-// skinny triangles.
-function makeRand(seed = 7) {
-  let state = seed
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296
-    return state / 4294967296
-  }
-}
-
-const rand = makeRand()
-const networkBands = [
-  { count: 24, x: [-70, 330], y: [10, 550] },
-  { count: 24, x: [870, 1270], y: [10, 550] },
-]
-
-function randomIn([min, max]) {
-  return min + rand() * (max - min)
-}
-
-function inContentQuietZone(x, y) {
-  return x > 305 && x < 895 && y > 145 && y < 355
-}
-
-function makeGraphNodes() {
-  const nodes = []
-  let id = 0
-  for (const band of networkBands) {
-    for (let i = 0; i < band.count; i += 1) {
-      let x = randomIn(band.x)
-      let y = randomIn(band.y)
-      if (inContentQuietZone(x, y)) {
-        y = y < 250 ? 116 - rand() * 70 : 402 + rand() * 95
-      }
-      const sizeRoll = rand()
-      nodes.push({
-        id: `n${id}`,
-        x,
-        y,
-        r: sizeRoll > 0.86 ? 10 + rand() * 7 : sizeRoll > 0.56 ? 4.5 + rand() * 5 : 2.1 + rand() * 3,
-        phase: rand() * Math.PI * 2,
-        drift: 4 + rand() * 9,
-        opacity: 0.24 + rand() * 0.2,
-      })
-      id += 1
-    }
-  }
-  return nodes
-}
-
-function makeGraphEdges(nodes) {
-  const edges = []
-  const seen = new Set()
-  for (const node of nodes) {
-    const neighbors = nodes
-      .filter((other) => other.id !== node.id)
-      .map((other) => {
-        const distance = Math.hypot(node.x - other.x, node.y - other.y)
-        return { other, distance }
-      })
-      .filter(({ distance }) => distance < 155)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 3)
-
-    for (const { other, distance } of neighbors) {
-      const key = [node.id, other.id].sort().join(':')
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({
-        from: node.id,
-        to: other.id,
-        opacity: Math.max(0.14, 0.38 - distance / 700),
-      })
-    }
-  }
-  return edges
-}
-
-const graphNodes = makeGraphNodes()
-const graphEdges = makeGraphEdges(graphNodes)
-const nodePos = reactive(
-  Object.fromEntries(graphNodes.map((n) => [n.id, { x: n.x, y: n.y }]))
-)
-let rafId = null
-function tickHeroBg(t) {
-  const time = t / 1000
-  for (const n of graphNodes) {
-    nodePos[n.id].x = n.x + Math.sin(time * 0.48 + n.phase) * n.drift
-    nodePos[n.id].y = n.y + Math.cos(time * 0.36 + n.phase) * n.drift
-  }
-  rafId = requestAnimationFrame(tickHeroBg)
-}
-onMounted(() => {
-  rafId = requestAnimationFrame(tickHeroBg)
-})
-onUnmounted(() => {
-  if (rafId) cancelAnimationFrame(rafId)
-})
 
 // This is just a simplified entry point into the real Search page (under
 // Analysis) -- submitting here never runs a query or shows results inline,
@@ -469,13 +348,9 @@ onMounted(async () => {
   inset: 0;
   width: 100%;
   height: 100%;
-}
-.network-lines {
-  stroke: rgba(210, 231, 244, 0.42);
-  stroke-width: 0.9;
-}
-.network-nodes {
-  fill: #d8e7ef;
+  --network-line: rgba(210, 231, 244, 0.42);
+  --network-node: #d8e7ef;
+  --network-line-width: 0.9;
 }
 .hero-inner {
   position: relative;
@@ -753,6 +628,7 @@ onMounted(async () => {
   font-weight: 800;
   color: #1b2145;
   line-height: 1.15;
+  letter-spacing: 0;
 }
 .stat-label {
   margin-top: 3px;
@@ -855,7 +731,9 @@ onMounted(async () => {
 
 @media (max-width: 720px) {
   .hero h1 { font-size: 34px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .search-bar {
     min-height: 54px;
   }

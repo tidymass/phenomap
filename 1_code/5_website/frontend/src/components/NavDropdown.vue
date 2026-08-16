@@ -62,7 +62,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
   background: none;
   border: none;
   font: inherit;
-  color: #6b7280;
+  color: #536173;
   font-weight: 700;
   font-size: 17px;
   cursor: pointer;
@@ -73,7 +73,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 }
 .dropdown-trigger.open,
 .dropdown-trigger:hover {
-  color: #3949ab;
+  color: #0f7c96;
 }
 .dropdown-trigger.with-avatar {
   padding: 0;

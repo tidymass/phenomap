@@ -39,7 +39,7 @@ const routes = [
   { path: '/download', name: 'download', component: DownloadView, meta: { requiresAuth: true, fullBleed: true } },
   { path: '/help', redirect: '/help/get-started' },
   { path: '/help/:topic', name: 'help', component: HelpView, meta: { fullBleed: true } },
-  { path: '/community', name: 'community', component: CommunityView },
+  { path: '/community', name: 'community', component: CommunityView, meta: { fullBleed: true } },
   { path: '/signup', name: 'signup', component: SignUpView, meta: { fullBleed: true } },
   { path: '/login', name: 'login', component: SignInView, meta: { fullBleed: true } },
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { fullBleed: true } },
