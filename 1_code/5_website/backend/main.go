@@ -36,6 +36,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/stats", handleStats(db))
+	mux.HandleFunc("GET /api/graph/overview", handleGraphOverview(db))
 	mux.HandleFunc("GET /api/search", handleSearch(db))
 	mux.HandleFunc("GET /api/path", handlePath(db))
 	mux.HandleFunc("POST /api/enrichment", handleEnrichment(enrichClient))

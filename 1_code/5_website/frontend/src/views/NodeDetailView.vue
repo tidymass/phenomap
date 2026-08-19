@@ -375,36 +375,125 @@
           </dl>
         </div>
 
-        <div class="card" id="relationships" v-for="group in neighborGroups" :key="group.relType">
-          <h2>
-            <TermInfo
-              :label="relTypeLabel(group.relType, node.label)"
-              :definition="termDefinition(relTypeLabel(group.relType, node.label))"
-              heading
-            />
-            <span class="count">
-              {{ group.items.length }}{{ group.total > group.items.length ? ` of ${group.total}` : '' }}
-            </span>
-          </h2>
-          <div class="neighbor-list">
-            <router-link
-              v-for="n in group.items"
-              :key="n.neighbor_label + n.neighbor_id"
-              :to="`/node/${n.neighbor_label}/${n.neighbor_id}`"
-              class="neighbor-row"
-              :style="{ '--accent': typeColor(n.neighbor_label) }"
-            >
-              <span class="badge small" :data-label="n.neighbor_label">{{ n.neighbor_label }}</span>
-              <span class="neighbor-row-name">{{ n.neighbor_name || n.neighbor_id }}</span>
-              <span class="neighbor-row-tier" v-if="tierLabel(n)" :class="`tier-${tierLabel(n)}`">{{ tierLabel(n) }}</span>
-              <span class="neighbor-row-bar" v-if="similarityPct(n) !== null">
-                <span class="neighbor-row-bar-fill" :style="{ width: similarityPct(n) + '%' }"></span>
+        <!-- ============ RELATED RECORDS: Network / List tab switch.
+             Network draws a hop-limited graph of this entity's neighbors
+             (Metabolite<->Module edges excluded -- that's a membership
+             fact, already shown in the curated cards above and in the
+             List tab, not "what's connected to what"). List is the
+             original per-relationship-type table, unfiltered. ============ -->
+        <div id="relationships" v-if="neighborGroups.length">
+          <div class="nd-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              class="nd-tab"
+              :class="{ active: relTab === 'network' }"
+              @click="relTab = 'network'"
+            >Network</button>
+            <button
+              type="button"
+              role="tab"
+              class="nd-tab"
+              :class="{ active: relTab === 'list' }"
+              @click="relTab = 'list'"
+            >List</button>
+          </div>
+
+          <div class="card" v-show="relTab === 'network'">
+            <h2>
+              <TermInfo label="Neighbor Network" :definition="termDefinition('Neighbor Network')" heading />
+              <span class="count" v-if="neighborGraph">{{ neighborGraph.nodes.length - 1 }}</span>
+            </h2>
+
+            <div class="nd-network-layout">
+              <div class="nd-network-canvas">
+                <div v-if="graphLoading" class="hint">Loading neighbor network…</div>
+                <template v-else>
+                  <NetworkGraph
+                    v-if="neighborGraph"
+                    :nodes="neighborGraph.nodes"
+                    :edges="neighborGraph.edges"
+                    :size="neighborGraph.size"
+                    @node-click="goToNeighbor"
+                  />
+                  <p class="hint" v-else>No neighbors match the selected filters.</p>
+                </template>
+              </div>
+
+              <div class="nd-network-controls">
+                <div class="nd-control-group">
+                  <div class="nd-control-label">Hops</div>
+                  <div class="nd-graph-hops">
+                    <button
+                      v-for="h in [1, 2, 3]"
+                      :key="h"
+                      type="button"
+                      class="nd-graph-hop-btn"
+                      :class="{ active: hopCount === h }"
+                      @click="setHopCount(h)"
+                    >{{ h }}</button>
+                  </div>
+                </div>
+
+                <div class="nd-control-group" v-if="graphRelTypes.length">
+                  <div class="nd-control-label">Relationship Types</div>
+                  <label class="nd-filter-check" v-for="t in graphRelTypes" :key="t.relType">
+                    <input
+                      type="checkbox"
+                      :checked="isRelTypeVisible(t.relType)"
+                      @change="toggleRelType(t.relType)"
+                    />
+                    {{ t.label }}
+                  </label>
+                </div>
+
+                <div class="nd-control-group" v-if="graphEntityTypes.length">
+                  <div class="nd-control-label">Entity Types</div>
+                  <label class="nd-filter-check" v-for="t in graphEntityTypes" :key="t.label">
+                    <input
+                      type="checkbox"
+                      :checked="isEntityTypeVisible(t.label)"
+                      @change="toggleEntityType(t.label)"
+                    />
+                    <i class="dot" :style="{ background: t.color }"></i>
+                    {{ t.label }}
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" v-show="relTab === 'list'" v-for="group in neighborGroups" :key="group.relType">
+            <h2>
+              <TermInfo
+                :label="relTypeLabel(group.relType, node.label)"
+                :definition="termDefinition(relTypeLabel(group.relType, node.label))"
+                heading
+              />
+              <span class="count">
+                {{ group.items.length }}{{ group.total > group.items.length ? ` of ${group.total}` : '' }}
               </span>
-              <span class="neighbor-row-pct" v-if="similarityPct(n) !== null">{{ similarityPct(n) }}%</span>
-              <svg class="neighbor-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="m9 6 6 6-6 6" />
-              </svg>
-            </router-link>
+            </h2>
+            <div class="neighbor-list">
+              <router-link
+                v-for="n in group.items"
+                :key="n.neighbor_label + n.neighbor_id"
+                :to="`/node/${n.neighbor_label}/${n.neighbor_id}`"
+                class="neighbor-row"
+                :style="{ '--accent': typeColor(n.neighbor_label) }"
+              >
+                <span class="badge small" :data-label="n.neighbor_label">{{ n.neighbor_label }}</span>
+                <span class="neighbor-row-name">{{ n.neighbor_name || n.neighbor_id }}</span>
+                <span class="neighbor-row-tier" v-if="tierLabel(n)" :class="`tier-${tierLabel(n)}`">{{ tierLabel(n) }}</span>
+                <span class="neighbor-row-bar" v-if="similarityPct(n) !== null">
+                  <span class="neighbor-row-bar-fill" :style="{ width: similarityPct(n) + '%' }"></span>
+                </span>
+                <span class="neighbor-row-pct" v-if="similarityPct(n) !== null">{{ similarityPct(n) }}%</span>
+                <svg class="neighbor-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              </router-link>
+            </div>
           </div>
         </div>
       </main>
@@ -414,12 +503,15 @@
 
 <script setup>
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getNode } from '../api.js'
 import TermInfo from '../components/TermInfo.vue'
+import NetworkGraph from '../components/NetworkGraph.vue'
 import { forceDirectedLayout, fitPositionsToCanvas } from '../lib/forceLayout.js'
+import { typeColors, typeColor } from '../lib/typeColors.js'
 
 const route = useRoute()
+const router = useRouter()
 
 const props = defineProps({
   label: { type: String, required: true },
@@ -455,13 +547,6 @@ const primaryName = computed(() => {
   return node.value.properties.module_id || props.id
 })
 
-// Same accent colors used on the Entity Search page, so a node's detail
-// page reads as a continuation of the same type, not a different site.
-const typeColors = { Study: '#3949ab', Phenotype: '#b3562c', Module: '#1a8f5e', Metabolite: '#0f7c96' }
-function typeColor(l) {
-  return typeColors[l] || '#6b7280'
-}
-
 const termDefinitions = {
   Accession: 'The external study accession assigned by the source repository, such as MetaboLights or Metabolomics Workbench.',
   Anchor: 'Core metabolites that define the module signal and give the module its main biochemical identity.',
@@ -488,6 +573,7 @@ const termDefinitions = {
   'Module Membership': 'Modules that contain this metabolite. The badge shows the metabolite role when that relationship is available.',
   'Modules In This Study': 'Modules reported by this study and linked back to the study record.',
   'MS2 Supported': 'Whether tandem MS/MS evidence is reported for metabolite annotation support in the study metadata.',
+  'Neighbor Network': 'An interactive map of this record\'s direct neighbors across all relationship types, colored by entity type. Use the toggles above the graph to focus on one relationship type at a time, or click a node to open that record.',
   'Ontology ID': 'The ontology identifier for the normalized phenotype term.',
   'Ontology Reference': 'The normalized phenotype ontology record used by PhenoMAP, usually linked through OLS.',
   Origin: 'The metabolite origin annotation, such as endogenous, exogenous, or unknown.',
@@ -633,6 +719,302 @@ const moduleGraph = computed(() => {
 
   return { nodes, edges, size }
 })
+
+// ---------- Neighbor Network ----------
+// A hop-limited graph of the current entity's neighbors, independent of
+// the unfiltered per-relationship-type List tab below. Three things make
+// it different from just walking node.value.neighbors directly:
+//
+// 1. Relationship-type allow-list per label. Metabolite<->Module
+//    (MEMBER_OF) is a real edge and is still fully shown in the List tab
+//    and the curated Metabolite Membership / Module Membership cards
+//    above, but it's a membership fact, not "what's connected to what" --
+//    drawing it here would mix a metabolite's module membership into what's
+//    meant to read as the network of real relationships: Metabolite<->
+//    Metabolite, Module<->Module, Module->Study, Study->Phenotype. Every
+//    other real edge type is kept, including Module<->Module (SIMILAR_TO)
+//    -- unlike MEMBER_OF it isn't a membership fact, it's a genuine
+//    connection between two modules, so it belongs in the graph. Study and
+//    Phenotype have no edges to exclude (their only real edge types are
+//    exactly the ones kept), so the allow-list is a no-op for them.
+// 2. Multi-hop, fetched on demand into rawNeighborGraph. Hop 1 comes
+//    straight from node.value.neighbors (already loaded, no fetch). Hop
+//    2/3 fetch each hop's frontier via getNode() and filter by *that*
+//    node's own allow-list, capped in both per-node fan-out and total
+//    node count so a hub entity doesn't turn into an unreadable (or
+//    unfetchably large) graph. Only the hop count triggers a refetch.
+// 3. Entity-type and relationship-type toggles, both applied on top of
+//    rawNeighborGraph in the neighborGraph computed below -- pure
+//    client-side filters over everything already fetched (every hop, not
+//    just the center's own hop 1), so toggling either one never refetches
+//    and never hides a type the graph actually contains. A node left with
+//    no surviving edge after filtering is dropped too, rather than shown
+//    floating with nothing connecting it to the rest of the graph.
+//
+// Edges are drawn, and relationship-type checkboxes labeled, exactly as
+// the knowledge graph names them (REPORTED_IN -> "Reported In", SIMILAR_TO
+// -> "Similar To", ...) via formatRelType below -- no direction/arrowheads,
+// no contextual rephrasing. SIMILAR_TO and CONNECTED_WITH are inherently
+// undirected relationships between two same-type entities anyway, so
+// there's no direction to get right or wrong here.
+const GRAPH_ALLOWED_REL_TYPES = {
+  Metabolite: ['CONNECTED_WITH', 'SIMILAR_TO'], // metabolite-metabolite network only; MEMBER_OF (-> Module) excluded
+  Module: ['REPORTED_IN', 'SIMILAR_TO'], // -> Study and -> other Modules; MEMBER_OF (-> Metabolite) excluded
+  Study: ['REPORTED_IN', 'INVESTIGATED'], // -> Module and -> Phenotype (its only two edge types anyway)
+  Phenotype: ['INVESTIGATED'], // -> Study only (its only edge type anyway)
+}
+function allowedNeighbors(label, neighbors) {
+  const allow = GRAPH_ALLOWED_REL_TYPES[label]
+  if (!allow) return neighbors || []
+  return (neighbors || []).filter((n) => allow.includes(n.rel_type))
+}
+
+const relTab = ref('network')
+
+// How many hops out from the current entity to fetch -- 1 (direct
+// neighbors only) up to 3. Resets to 1 whenever the center entity changes
+// (see load()) so landing on a hub entity doesn't silently kick off a
+// large fetch cascade. This is the *only* control that triggers a refetch
+// -- entity-type and relationship-type toggles below are pure client-side
+// filters over whatever's already been fetched at the current hop count.
+const hopCount = ref(1)
+function setHopCount(h) {
+  if (hopCount.value === h) return
+  hopCount.value = h
+  refreshRawNeighborGraph()
+}
+
+// Controls which relationship types are *displayed*, across every hop
+// already fetched -- a client-side filter over rawNeighborGraph.edgeList,
+// so toggling it never refetches and always offers every relType the
+// current hop count actually reached (not just the center's own hop-1
+// types -- a Study only has REPORTED_IN/INVESTIGATED touching it directly,
+// but its 2-3 hop neighborhood can easily include a Module<->Module
+// SIMILAR_TO edge that this toggle needs to be able to hide too).
+const relTypeToggle = ref({})
+function isRelTypeVisible(relType) {
+  return relTypeToggle.value[relType] !== false
+}
+function toggleRelType(relType) {
+  relTypeToggle.value = { ...relTypeToggle.value, [relType]: !isRelTypeVisible(relType) }
+}
+// Every relType actually present among the fetched edges, labeled with the
+// same literal formatRelType phrasing as an edge's own click-to-reveal
+// label (see the edges .map below) rather than relTypeLabel's List-tab
+// group-title phrasing -- this is a per-relationship-type filter, not a
+// set of section headers, so it should read as "REPORTED_IN" -> "Reported
+// In", not as "Modules In This Study".
+const graphRelTypes = computed(() => {
+  if (!rawNeighborGraph.value) return []
+  const seen = new Set(rawNeighborGraph.value.edgeList.map((e) => e.relType))
+  return [...seen].map((relType) => ({ relType, label: formatRelType(relType) }))
+})
+
+// Controls which neighbor entity types are *displayed*, across every hop
+// already fetched -- a client-side filter over rawNeighborGraph, so
+// toggling it never refetches (see neighborGraph below).
+const entityTypeToggle = ref({})
+function isEntityTypeVisible(label) {
+  return entityTypeToggle.value[label] !== false
+}
+function toggleEntityType(label) {
+  entityTypeToggle.value = { ...entityTypeToggle.value, [label]: !isEntityTypeVisible(label) }
+}
+// Every neighbor label actually present in the fetched (but not yet
+// entity-type-filtered) graph, so an unchecked type's checkbox doesn't
+// disappear along with the nodes it just hid.
+const graphEntityTypes = computed(() => {
+  if (!rawNeighborGraph.value) return []
+  const seen = new Set()
+  for (const info of rawNeighborGraph.value.nodeList) {
+    if (!info.isCenter) seen.add(info.label)
+  }
+  return [...seen].map((label) => ({ label, color: typeColor(label) }))
+})
+
+const NEIGHBOR_GRAPH_MARGIN = 20
+// Guard against a very high-degree node (e.g. a Study with hundreds of
+// reported Modules) turning the graph into an unreadable hairball, or
+// hop 2/3 fanning out into dozens of API calls -- the full set is still
+// browsable in the List tab.
+const NEIGHBOR_GRAPH_MAX_NODES = 60
+const NEIGHBOR_GRAPH_HOP_FANOUT = 10 // neighbors expanded per node, per hop
+
+// "label:id" -> Promise<Neighbor[]> (already allow-list filtered), so
+// re-running the fetch after a hop-count or relationship-type toggle
+// change doesn't refetch a node hop 2 already pulled in. Cleared whenever
+// the center entity changes.
+let neighborFetchCache = new Map()
+function fetchAllowedNeighbors(label, id) {
+  const key = `${label}:${id}`
+  if (!neighborFetchCache.has(key)) {
+    neighborFetchCache.set(
+      key,
+      getNode(label, id)
+        .then((n) => allowedNeighbors(label, n.neighbors))
+        .catch(() => [])
+    )
+  }
+  return neighborFetchCache.get(key)
+}
+
+// The fetched-but-not-yet-entity-type-filtered graph: { nodeList, edgeList,
+// truncated, hop1Total }, keyed by "label::id" rather than laid-out
+// {x,y} points -- layout only happens in the neighborGraph computed below,
+// after the entity-type filter removes whatever the user unchecked, so
+// hiding a type doesn't leave a gap where a removed node used to sit.
+const rawNeighborGraph = ref(null)
+const graphLoading = ref(false)
+let graphRequestId = 0
+
+async function refreshRawNeighborGraph() {
+  const thisRequest = ++graphRequestId
+  const centerNode = node.value
+  if (!centerNode) {
+    rawNeighborGraph.value = null
+    return
+  }
+
+  const centerLabel = centerNode.label
+  const centerId = props.id
+  const centerKey = `${centerLabel}::${centerId}`
+  const hops = hopCount.value
+
+  const visited = new Map() // key -> { key, id, label, name, isCenter }
+  const edgeKeys = new Set()
+  const edgeList = [] // [fromKey, toKey]
+  visited.set(centerKey, { key: centerKey, id: centerId, label: centerLabel, name: primaryName.value, isCenter: true })
+
+  let frontier = [{ key: centerKey, label: centerLabel, id: centerId }]
+  let hop1Total = 0
+  let truncated = false
+
+  for (let hop = 1; hop <= hops && frontier.length; hop++) {
+    if (hop > 1) graphLoading.value = true
+
+    const neighborsPerFrom = await Promise.all(
+      frontier.map((from) =>
+        from.key === centerKey
+          ? Promise.resolve(allowedNeighbors(centerLabel, centerNode.neighbors))
+          : fetchAllowedNeighbors(from.label, from.id)
+      )
+    )
+    if (thisRequest !== graphRequestId) return // superseded by a newer hop-count/toggle change
+
+    const nextFrontier = []
+    for (let i = 0; i < frontier.length; i++) {
+      if (visited.size >= NEIGHBOR_GRAPH_MAX_NODES) {
+        truncated = true
+        break
+      }
+      const from = frontier[i]
+      const neighbors = neighborsPerFrom[i]
+      if (from.key === centerKey) hop1Total = neighbors.length
+
+      let added = 0
+      for (const n of neighbors) {
+        if (added >= NEIGHBOR_GRAPH_HOP_FANOUT || visited.size >= NEIGHBOR_GRAPH_MAX_NODES) {
+          truncated = true
+          break
+        }
+        const key = `${n.neighbor_label}::${n.neighbor_id}`
+        if (key === from.key) continue
+        if (!visited.has(key)) {
+          visited.set(key, { key, id: n.neighbor_id, label: n.neighbor_label, name: n.neighbor_name || n.neighbor_id })
+          nextFrontier.push({ key, label: n.neighbor_label, id: n.neighbor_id })
+          added++
+        }
+        const edgeKey = [from.key, key].sort().join('|')
+        if (!edgeKeys.has(edgeKey)) {
+          edgeKeys.add(edgeKey)
+          edgeList.push({ from: from.key, to: key, relType: n.rel_type })
+        }
+      }
+    }
+    frontier = nextFrontier
+  }
+
+  graphLoading.value = false
+  if (thisRequest !== graphRequestId) return
+
+  rawNeighborGraph.value = { nodeList: [...visited.values()], edgeList, truncated, hop1Total }
+}
+
+// Lays out whatever survives the entity-type filter -- recomputed
+// instantly (no fetch) whenever entityTypeToggle or rawNeighborGraph
+// changes.
+const neighborGraph = computed(() => {
+  const raw = rawNeighborGraph.value
+  if (!raw) return null
+
+  // Entity Types filters by node color, Relationship Types filters by
+  // edge type -- apply both, then drop any non-center node left with no
+  // surviving edge (rather than showing it floating, disconnected from
+  // everything else in the graph).
+  const keepEntity = new Set()
+  for (const info of raw.nodeList) {
+    if (info.isCenter || isEntityTypeVisible(info.label)) keepEntity.add(info.key)
+  }
+  const edgeList = raw.edgeList.filter(
+    (e) => keepEntity.has(e.from) && keepEntity.has(e.to) && isRelTypeVisible(e.relType)
+  )
+  const centerInfo = raw.nodeList.find((info) => info.isCenter)
+  const connected = new Set(centerInfo ? [centerInfo.key] : [])
+  for (const e of edgeList) {
+    connected.add(e.from)
+    connected.add(e.to)
+  }
+  const nodeList = raw.nodeList.filter((info) => keepEntity.has(info.key) && connected.has(info.key))
+  if (nodeList.length <= 1) return null
+
+  const nodeKeys = nodeList.map((info) => info.key)
+  const size = Math.ceil(Math.max(280, Math.min(520, 220 + Math.sqrt(nodeKeys.length) * 24)))
+  const layoutSpan = size - NEIGHBOR_GRAPH_MARGIN * 2
+  const layoutPairs = edgeList.map((e) => [e.from, e.to])
+  const rawPositions = forceDirectedLayout(nodeKeys, layoutPairs, layoutSpan)
+  const positions = fitPositionsToCanvas(rawPositions, size, NEIGHBOR_GRAPH_MARGIN)
+
+  const nodes = nodeList.map((info) => {
+    const pt = positions.get(info.key)
+    return {
+      id: info.key,
+      routeLabel: info.label,
+      routeId: info.id,
+      name: info.name,
+      label: info.label,
+      x: pt.x,
+      y: pt.y,
+      // The current entity reads as clearly bigger than every neighbor,
+      // regardless of hop -- there's only ever one center node.
+      r: info.isCenter ? 13 : 4.5,
+      color: typeColor(info.label),
+      isCenter: !!info.isCenter,
+    }
+  })
+  const nodeByKey = new Map(nodes.map((n) => [n.id, n]))
+  const edges = edgeList
+    .map((e, i) => {
+      const na = nodeByKey.get(e.from)
+      const nb = nodeByKey.get(e.to)
+      if (!na || !nb) return null
+      // formatRelType, not relTypeLabel -- this label describes one
+      // specific edge ("this line is a SIMILAR_TO relationship"), not a
+      // group of neighbors, so it needs the literal "Similar To" rather
+      // than relTypeLabel's collective "Similar Modules" (which reads
+      // fine as a section title but not as a single edge's description).
+      return { key: `e-${i}`, x1: na.x, y1: na.y, x2: nb.x, y2: nb.y, relLabel: formatRelType(e.relType) }
+    })
+    .filter(Boolean)
+
+  return { nodes, edges, size, truncated: raw.truncated, totalCount: raw.hop1Total }
+})
+
+function goToNeighbor(n) {
+  router.push({
+    path: `/node/${encodeURIComponent(n.routeLabel)}/${encodeURIComponent(n.routeId)}`,
+    query: { returnTo: route.fullPath, returnLabel: primaryName.value },
+  })
+}
 
 const relationshipItems = computed(() => {
   if (!node.value || node.value.label !== 'Module') return []
@@ -794,6 +1176,11 @@ const relTypeLabels = {
 }
 function relTypeLabel(relType, viewingLabel) {
   if (viewingLabel === 'Study' && relType === 'REPORTED_IN') return 'Modules In This Study'
+  // Only reachable from the Network tab's Relationship Types toggle --
+  // neighborGroups (List tab) drops a Study's own INVESTIGATED entirely
+  // since it's already shown as a linked badge in the curated Phenotype
+  // card above, so this label never has to appear there.
+  if (viewingLabel === 'Study' && relType === 'INVESTIGATED') return 'Investigated Phenotype'
   if (viewingLabel === 'Phenotype' && relType === 'INVESTIGATED') return 'Studies Investigating This Phenotype'
   // CONNECTED_WITH is the correct type for metabolite-metabolite (MRN) edges,
   // but RUNBOOK.md's import command had its relationship type labels
@@ -802,6 +1189,17 @@ function relTypeLabel(relType, viewingLabel) {
   // viewing context rather than trusting the raw type name here.
   if (viewingLabel === 'Metabolite' && (relType === 'CONNECTED_WITH' || relType === 'SIMILAR_TO')) return 'Connected Metabolites'
   if (relTypeLabels[relType]) return relTypeLabels[relType]
+  return formatRelType(relType)
+}
+
+// Plain title-case of the raw relationship type, no contextual rephrasing
+// -- e.g. SIMILAR_TO -> "Similar To", MEMBER_OF -> "Member Of". Used for a
+// single edge's click-to-reveal label in the Network tab, where
+// relTypeLabel's collective, group-title phrasing ("Similar Modules",
+// "Modules In This Study") reads oddly describing one specific edge
+// instead of "here's the list" -- this is what relTypeLabel itself falls
+// back to for any type it doesn't special-case.
+function formatRelType(relType) {
   return relType
     .toLowerCase()
     .split('_')
@@ -859,7 +1257,7 @@ const sections = computed(() => {
       originFracs.value && { id: 'origin', label: 'Metabolite Origin' },
       (relationshipItems.value.length || studyPhenotypes.value.length || pmidList.value.length) && { id: 'phenotype-relationship', label: 'Phenotype Relationship' },
       membershipGroups.value.length && { id: 'metabolite-membership', label: 'Metabolite Membership' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
+      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Study') {
@@ -867,26 +1265,26 @@ const sections = computed(() => {
       studyDesignItems.value.length && { id: 'study-design', label: 'Study Design' },
       studyPhenotypeLink.value && { id: 'phenotype', label: 'Phenotype' },
       (studySourceItems.value.length || p.value.Link || doiUrl.value) && { id: 'source', label: 'Source & Publication' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
+      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Phenotype') {
     return [
       (phenotypeOntologyItems.value.length || p.value.OLS_Link) && { id: 'ontology', label: 'Ontology Reference' },
       phenotypeModules.value.length && { id: 'related-modules', label: 'Related Modules' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
+      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Metabolite') {
     return [
       metaboliteClassificationItems.value.length && { id: 'classification', label: 'Chemical Classification' },
       (metaboliteIdentifierItems.value.length || p.value.HMDB_URL || p.value.KEGG_URL) && { id: 'identifiers', label: 'Chemical Identifiers' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
+      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   return [
     { id: 'overview', label: 'Overview' },
-    neighborGroups.value.length && { id: 'relationships', label: 'Related Records' },
+    neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
   ].filter(Boolean)
 })
 
@@ -899,8 +1297,19 @@ function formatValue(value) {
 async function load() {
   loading.value = true
   error.value = ''
+  // Reset relationship-type and entity-type visibility, hop count, and the
+  // hop-2/3 fetch cache so switching to a different entity doesn't carry
+  // over state that belonged to the last one (a toggle hiding a type this
+  // entity doesn't have, a hop count that would kick off a large fetch
+  // cascade on a hub entity, or stale cached neighbor data).
+  relTypeToggle.value = {}
+  entityTypeToggle.value = {}
+  hopCount.value = 1
+  neighborFetchCache = new Map()
+  rawNeighborGraph.value = null
   try {
     node.value = await getNode(props.label, props.id)
+    refreshRawNeighborGraph()
   } catch (e) {
     error.value = e.message
   } finally {
@@ -1130,6 +1539,123 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+#relationships {
+  scroll-margin-top: 24px;
+}
+.nd-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.nd-tab {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: #8790b3;
+  cursor: pointer;
+}
+.nd-tab:hover {
+  color: #3949ab;
+}
+.nd-tab.active {
+  color: #1b2145;
+  background: #fff;
+  box-shadow: inset 0 -2px 0 #3949ab;
+}
+
+.nd-network-layout {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+}
+.nd-network-canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 18px;
+  background: #fff;
+  border: 1px solid #e6e9f5;
+  border-radius: 10px;
+}
+.nd-network-controls {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px 18px;
+  background: #fafbfe;
+  border: 1px solid #e6e9f5;
+  border-radius: 10px;
+}
+.nd-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nd-control-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9aa1c2;
+}
+.nd-filter-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #444b63;
+  cursor: pointer;
+}
+.nd-filter-check input {
+  width: 14px;
+  height: 14px;
+  accent-color: #3949ab;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nd-filter-check .dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.nd-graph-hops {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nd-graph-hop-btn {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #dde3fb;
+  background: #f2f3f6;
+  color: #8790b3;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.nd-graph-hop-btn.active {
+  background: #3949ab;
+  color: #fff;
+  border-color: #3949ab;
+}
+.nd-graph-hop-btn:hover:not(.active) {
+  background: #e3e9ff;
+  color: #3949ab;
+}
 /* ---------- sidebar + content ---------- */
 .nd-body {
   display: flex;
@@ -1572,6 +2098,13 @@ h2 {
 @media (max-width: 900px) {
   .nd-body {
     flex-direction: column;
+  }
+  .nd-network-layout {
+    flex-direction: column;
+  }
+  .nd-network-controls {
+    flex: 0 0 auto;
+    width: 100%;
   }
   .nd-sidebar {
     position: static;

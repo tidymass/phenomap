@@ -89,6 +89,17 @@ export function getStats() {
   return getJSON('/api/stats')
 }
 
+// Returns { nodes, edges }: a real weighted-random sample of Study/
+// Phenotype/Module/Metabolite nodes and the real MEMBER_OF/REPORTED_IN/
+// INVESTIGATED/SIMILAR_TO edges among exactly those sampled nodes -- not
+// the complete graph (see overviewSampleSize in backend/graph_overview.go
+// for why). The sample is drawn once and cached server-side for the
+// backend process's lifetime, not re-rolled on a timer -- restart the
+// backend to get a new draw. Backs the homepage's 3D knowledge graph panel.
+export function getGraphOverview() {
+  return getJSON('/api/graph/overview')
+}
+
 export function getChatQuota() {
   return getJSON('/api/chat/quota')
 }

@@ -45,6 +45,30 @@ func handleStats(db *DB) http.HandlerFunc {
 	}
 }
 
+// GET /api/graph/overview
+//
+// Returns a real sample of the schema graph -- a weighted random sample of
+// Study/Phenotype/Module/Metabolite nodes and the real MEMBER_OF/
+// REPORTED_IN/INVESTIGATED/SIMILAR_TO edges among exactly those sampled
+// nodes (see overviewSampleSize in graph_overview.go for why this is a
+// sample, not the complete graph). Backs the homepage's 3D knowledge graph
+// panel -- every node and edge it returns is real, just not necessarily
+// every one that exists.
+func handleGraphOverview(db *DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+
+		overview, err := db.GraphOverview(ctx)
+		if err != nil {
+			log.Printf("graph overview error: %v", err)
+			writeError(w, http.StatusInternalServerError, "failed to load graph overview")
+			return
+		}
+		writeJSON(w, http.StatusOK, overview)
+	}
+}
+
 // GET /api/search?q=...&label=Module&page=1&page_size=20
 //
 // An empty q with a label falls back to "browse" mode: every node of that

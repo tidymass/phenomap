@@ -312,6 +312,7 @@ import { useRoute, useRouter } from 'vue-router'
 import NodePicker from '../components/NodePicker.vue'
 import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
 import { findPathGraph } from '../api.js'
+import { typeColor } from '../lib/typeColors.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -527,14 +528,6 @@ watch(activeTab, () => {
 onMounted(() => {
   restorePathState()
 })
-
-// Same accent colors used across Entity Search / node detail pages, so this
-// graph reads as a continuation of the same site rather than a different
-// visual language.
-const typeColors = { Study: '#3949ab', Phenotype: '#b3562c', Module: '#1a8f5e', Metabolite: '#0f7c96' }
-function typeColor(label) {
-  return typeColors[label] || '#6b7280'
-}
 
 function clamp01(v) {
   return Math.max(0, Math.min(1, v))

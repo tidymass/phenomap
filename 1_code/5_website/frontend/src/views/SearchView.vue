@@ -2,11 +2,13 @@
   <div class="home">
     <!-- ============ HERO ============ -->
     <section class="hero">
-      <AnimatedNetworkField class="hero-bg" :seed="7" />
+      <div class="hero-bg" aria-hidden="true">
+        <span class="hero-blob hero-blob-a"></span>
+        <span class="hero-blob hero-blob-b"></span>
+      </div>
 
       <div class="hero-inner">
-        <span class="eyebrow">Phenotype-aware Metabolic Module Atlas Portal</span>
-        <h1>PhenoMAP</h1>
+        <img src="/logo.png" alt="PhenoMAP" class="hero-logo" />
         <p class="tagline">
           A phenotype-centered knowledge graph connecting phenotypes,
           metabolomics studies, co-regulated metabolite modules, and
@@ -50,13 +52,14 @@
         <div class="example-chips" v-if="!query && currentExamples.length">
           <span class="chip-label">Try</span>
           <button
-            v-for="ex in currentExamples"
+            v-for="(ex, idx) in currentExamples"
             :key="ex"
             type="button"
             class="chip"
+            :aria-label="`Try example ${ex}`"
             @click="goToSearch(ex)"
           >
-            {{ ex }}
+            #{{ idx + 1 }}
           </button>
         </div>
       </div>
@@ -65,34 +68,37 @@
 
     <!-- ============ HOMEPAGE BODY ============ -->
       <section class="stats-strip">
-        <div class="container stats-grid">
-          <div class="stat-card" v-for="s in statCards" :key="s.key">
-            <span class="stat-icon" :data-label="s.key">
-              <svg v-if="s.key === 'Metabolite'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7">
-                <circle cx="6" cy="6" r="2.3" />
-                <circle cx="18" cy="6" r="2.3" />
-                <circle cx="12" cy="17" r="2.3" />
-                <path d="M7.7 7.3 10.6 14.9M16.3 7.3 13.4 14.9M8.3 6h7.4" />
-              </svg>
-              <svg v-else-if="s.key === 'Module'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7">
-                <circle cx="6" cy="6.5" r="2.1" />
-                <circle cx="18" cy="6.5" r="2.1" />
-                <circle cx="6" cy="17.5" r="2.1" />
-                <circle cx="18" cy="17.5" r="2.1" />
-                <circle cx="12" cy="12" r="2.3" />
-                <path d="M7.6 7.9 10.3 10.6M16.4 7.9 13.7 10.6M7.6 16.1 10.3 13.4M16.4 16.1 13.7 13.4" />
-              </svg>
-              <svg v-else-if="s.key === 'Study'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7">
-                <rect x="4" y="5" width="16" height="15" rx="2" />
-                <path d="M8 3v4M16 3v4M4 10h16M8.5 14h3M8.5 17h6" />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round">
-                <path d="M3 13h3.2l2 6.5L13 4.5l1.8 8.5H21" />
-              </svg>
-            </span>
-            <div class="stat-text">
-              <div class="stat-number">{{ s.display }}</div>
-              <div class="stat-label">{{ s.label }}</div>
+        <div class="stats-container">
+          <div class="stats-grid">
+            <div class="stat-card" v-for="s in statCards" :key="s.key">
+              <span class="stat-icon" :data-label="s.key">
+                <svg v-if="s.key === 'Metabolite'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <circle cx="6" cy="6" r="2.3" />
+                  <circle cx="18" cy="6" r="2.3" />
+                  <circle cx="12" cy="17" r="2.3" />
+                  <path d="M7.7 7.3 10.6 14.9M16.3 7.3 13.4 14.9M8.3 6h7.4" />
+                </svg>
+                <svg v-else-if="s.key === 'Module'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <circle cx="6" cy="6.5" r="2.1" />
+                  <circle cx="18" cy="6.5" r="2.1" />
+                  <circle cx="6" cy="17.5" r="2.1" />
+                  <circle cx="18" cy="17.5" r="2.1" />
+                  <circle cx="12" cy="12" r="2.3" />
+                  <path d="M7.6 7.9 10.3 10.6M16.4 7.9 13.7 10.6M7.6 16.1 10.3 13.4M16.4 16.1 13.7 13.4" />
+                </svg>
+                <svg v-else-if="s.key === 'Study'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+                  <rect x="4" y="5" width="16" height="15" rx="2" />
+                  <path d="M8 3v4M16 3v4M4 10h16M8.5 14h3M8.5 17h6" />
+                </svg>
+                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+                  <path d="M3 13h3.2l2 6.5L13 4.5l1.8 8.5H21" />
+                </svg>
+              </span>
+              <div class="stat-text">
+                <div class="stat-number">{{ s.display }}</div>
+                <div class="stat-label">{{ s.label }}</div>
+                <p>{{ s.description }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -179,20 +185,39 @@
 
       <section id="about-phenomap" class="container-wide schema-section">
         <h2 class="section-title">About PhenoMAP</h2>
-        <p class="hint">
-          PhenoMAP is organized as a phenotype-centered knowledge graph
-          comprising four core entity types: phenotypes, studies, dysregulated
-          metabolic modules, and metabolites. Studies are linked to their
-          normalized phenotypes, modules are connected to the studies in which
-          they are identified, and metabolites are linked to both their
-          corresponding modules and the underlying metabolic reaction network.
-          Similarity relationships are further established between modules
-          based on their metabolic composition and functional interpretation,
-          enabling cross-study and cross-phenotype comparison, evidence
-          tracing, and module-level querying.
-        </p>
-        <div class="schema-image-frame">
-          <img src="/phenomap.png" alt="PhenoMAP knowledge graph schema" />
+        <div class="schema-section-grid">
+          <div class="schema-text">
+            <div class="schema-text-block">
+              <p class="text-kicker">Overview</p>
+              <p class="hint">
+                PhenoMAP is a phenotype-centered knowledge graph linking four core
+                entity types: <strong>phenotypes</strong>, <strong>studies</strong>,
+                dysregulated <strong>metabolic modules</strong>, and
+                <strong>metabolites</strong>. Studies connect to their normalized
+                phenotypes, modules to the studies where they were identified, and
+                metabolites to both their modules and the underlying metabolic
+                reaction network.
+              </p>
+            </div>
+            <div class="schema-text-block">
+              <p class="text-kicker">Cross-Study Links</p>
+              <p class="hint">
+                Similarity relationships further connect related modules across
+                studies, enabling cross-phenotype comparison and module-level
+                querying — explorable interactively or downloaded as reusable
+                graph tables.
+              </p>
+            </div>
+            <div class="schema-text-block">
+              <p class="text-kicker">Getting Started</p>
+              <p class="hint">
+                Click the graph to explore.
+              </p>
+            </div>
+          </div>
+          <div class="schema-image-frame">
+            <KnowledgeGraphGlobe @browse-click="goToGraphBrowse" />
+          </div>
         </div>
       </section>
   </div>
@@ -202,7 +227,7 @@
 import { onMounted, ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStats } from '../api.js'
-import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
+import KnowledgeGraphGlobe from '../components/KnowledgeGraphGlobe.vue'
 
 const router = useRouter()
 
@@ -268,10 +293,26 @@ function scrollToAboutPhenoMap() {
   })
 }
 
+// A click (not a drag) anywhere on the 3D knowledge graph opens the full
+// entity search/browse page -- see KnowledgeGraphGlobe.vue for why there's
+// no per-node destination (individual node click-through was dropped for
+// performance: raycasting into thousands of instances on every hover was a
+// real interaction cost, and the graph is too dense to pick a specific
+// node at a glance anyway).
+function goToGraphBrowse() {
+  router.push('/search')
+}
+
 // --- live stats strip ---
 const stats = ref(null)
 const statOrder = ['Metabolite', 'Module', 'Study', 'Phenotype']
 const statLabels = { Study: 'Studies', Phenotype: 'Phenotypes', Module: 'Modules', Metabolite: 'Metabolites' }
+const statDescriptions = {
+  Metabolite: 'Annotated compounds represented in the current graph',
+  Module: 'Dysregulated metabolic modules available for exploration',
+  Study: 'Public metabolomics studies curated into PhenoMAP',
+  Phenotype: 'Normalized phenotype contexts linked to study evidence',
+}
 
 // Counts animate up from 0 on every load instead of just appearing.
 const animatedCounts = reactive({ Study: 0, Phenotype: 0, Module: 0, Metabolite: 0 })
@@ -293,6 +334,7 @@ const statCards = computed(() => {
     return {
       key,
       label: statLabels[key],
+      description: statDescriptions[key],
       display: row ? animatedCounts[key].toLocaleString() : '—',
     }
   })
@@ -333,14 +375,22 @@ onMounted(async () => {
   width: 100%;
   box-sizing: border-box;
 }
+.stats-container {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 28px;
+  width: 100%;
+  box-sizing: border-box;
+}
 
 /* ---------- hero ---------- */
 .hero {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 42%, rgba(42, 90, 128, 0.5), transparent 34%),
-    linear-gradient(135deg, #123a55 0%, #245c7e 48%, #174564 100%);
-  padding: 96px 24px 160px;
+  background: linear-gradient(128deg, #123a55 0%, #245c7e 52%, #2f8383 100%);
+  background-size: 220% 220%;
+  animation: hero-gradient-shift 10s ease-in-out infinite;
+  padding: 34px 24px 45px;
   text-align: center;
 }
 .hero-bg {
@@ -348,40 +398,67 @@ onMounted(async () => {
   inset: 0;
   width: 100%;
   height: 100%;
-  --network-line: rgba(210, 231, 244, 0.42);
-  --network-node: #d8e7ef;
-  --network-line-width: 0.9;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+.hero-blob-a {
+  width: 460px;
+  height: 460px;
+  top: -240px;
+  right: -140px;
+  background: rgba(255, 255, 255, 0.22);
+  opacity: 0.92;
+  animation: hero-blob-drift-a 11s ease-in-out infinite alternate;
+}
+.hero-blob-b {
+  width: 400px;
+  height: 400px;
+  bottom: -220px;
+  left: -150px;
+  background: rgba(255, 255, 255, 0.15);
+  opacity: 0.88;
+  animation: hero-blob-drift-b 13s ease-in-out infinite alternate;
+}
+@keyframes hero-gradient-shift {
+  0% { background-position: 0% 35%; }
+  50% { background-position: 100% 65%; }
+  100% { background-position: 0% 35%; }
+}
+@keyframes hero-blob-drift-a {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-60px, 36px, 0) scale(1.15); }
+}
+@keyframes hero-blob-drift-b {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(54px, -40px, 0) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero,
+  .hero-blob { animation: none; }
 }
 .hero-inner {
   position: relative;
+  z-index: 1;
   max-width: 860px;
   margin: 0 auto;
 }
-.eyebrow {
-  display: inline-block;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #8fd7ea;
-  background: rgba(34, 211, 238, 0.12);
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  padding: 6px 16px;
-  border-radius: 999px;
-  margin-bottom: 24px;
-}
-.hero h1 {
-  margin: 0 0 18px;
-  font-size: 60px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: #fff;
+.hero-logo {
+  display: block;
+  height: 220px;
+  width: auto;
+  margin: 0 auto 2px;
 }
 .tagline {
   color: #b9c2e6;
   font-size: 19px;
   line-height: 1.6;
-  margin: 0 0 36px;
+  margin: 0 0 44px;
 }
 
 .search-panel {
@@ -506,7 +583,7 @@ onMounted(async () => {
 }
 
 .example-chips {
-  margin-top: 18px;
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -537,7 +614,7 @@ onMounted(async () => {
 .analysis-jump-row {
   display: flex;
   justify-content: center;
-  margin: 28px 0 -36px;
+  margin: 8px 0 -36px;
   position: relative;
   z-index: 3;
 }
@@ -572,71 +649,106 @@ onMounted(async () => {
   stroke-linejoin: round;
 }
 
-/* ---------- stats strip (floats over hero edge) ---------- */
+/* ---------- release metrics ---------- */
 .stats-strip {
-  margin-top: -70px;
+  margin-top: 0;
   position: relative;
-  z-index: 2;
+  z-index: 1;
+  padding: 34px 0 24px;
+  background: #f7f8fa;
 }
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 0;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 16px 36px -18px rgba(17, 24, 60, 0.35);
-  padding: 26px 8px;
+  gap: 18px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.stats-title {
+  margin-bottom: 64px;
 }
 .stat-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
-  padding: 10px 22px;
+  gap: 18px;
+  min-width: 0;
+  min-height: 148px;
+  padding: 24px 26px;
+  border: 1px solid #d3e0ee;
   border-radius: 12px;
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-.stat-card:not(:last-child) {
-  border-right: 1px solid #eef0f5;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 18px 34px -30px rgba(35, 74, 110, 0.38);
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 .stat-card:hover {
-  background: #f7f8fc;
-  transform: translateY(-1px);
+  border-color: #b9d2e8;
+  box-shadow: 0 22px 42px -30px rgba(35, 74, 110, 0.48);
+  transform: translateY(-2px);
 }
 .stat-icon {
-  width: 54px;
-  height: 54px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  margin-bottom: 0;
   color: #fff;
+  box-shadow: 0 16px 30px -20px rgba(17, 24, 60, 0.48);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.stat-card:hover .stat-icon {
+  box-shadow: 0 18px 34px -20px rgba(17, 24, 60, 0.54);
+  transform: translateY(-1px);
 }
 .stat-icon svg {
-  width: 27px;
-  height: 27px;
+  width: 28px;
+  height: 28px;
 }
 .stat-icon[data-label='Study'] { background: #3949ab; }
 .stat-icon[data-label='Phenotype'] { background: #b3562c; }
 .stat-icon[data-label='Module'] { background: #1a8f5e; }
 .stat-icon[data-label='Metabolite'] { background: #0f7c96; }
 .stat-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: left;
 }
 .stat-number {
-  font-size: 34px;
+  font-size: clamp(30px, 2.5vw, 40px);
   font-weight: 800;
-  color: #1b2145;
-  line-height: 1.15;
+  color: #1f5788;
+  line-height: 1.05;
   letter-spacing: 0;
 }
 .stat-label {
-  margin-top: 3px;
-  font-size: 14px;
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #223247;
+}
+.stat-text p {
+  margin: 6px 0 0;
+  max-width: 230px;
+  color: #607086;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #8790b3;
+  line-height: 1.45;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* ---------- schema section ---------- */
@@ -651,20 +763,75 @@ onMounted(async () => {
   letter-spacing: 0;
   color: #1b1f24;
 }
+.schema-section .section-title {
+  margin: 0 0 32px;
+}
+.schema-section-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  align-items: start;
+  gap: 56px;
+}
+.schema-text {
+  display: flex;
+  flex-direction: column;
+}
+.schema-text-block {
+  padding: 0 0 22px;
+  margin: 0 0 22px;
+  border-bottom: 1px solid #dfe6ee;
+}
+.schema-text-block:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.text-kicker {
+  margin: 0 0 8px;
+  color: #0f7c96;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .schema-section .hint {
-  margin: 0 0 28px;
+  margin: 0;
   max-width: none;
-  text-align: justify;
-  font-size: 18px;
-  line-height: 1.75;
+  text-align: left;
+  font-size: 16.5px;
+  line-height: 1.7;
+  color: #5f6f83;
+}
+.schema-section .hint strong {
+  color: #1b1f24;
+  font-weight: 750;
 }
 .schema-image-frame {
+  position: relative;
   overflow: hidden;
-}
-.schema-image-frame img {
-  display: block;
   width: 100%;
+  aspect-ratio: 4 / 3;
   height: auto;
+  min-height: 380px;
+  border-radius: 14px;
+  border: 1px solid #e0e6ee;
+  background: linear-gradient(180deg, #fbfdff 0%, #f2f5fa 100%);
+}
+
+@media (max-width: 960px) {
+  .schema-section-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .schema-section .section-title,
+  .schema-section .hint,
+  .schema-section .text-kicker {
+    text-align: center;
+  }
+  .schema-image-frame {
+    aspect-ratio: auto;
+    height: min(58vw, 560px);
+  }
 }
 
 /* ---------- feature cards ---------- */
@@ -730,9 +897,42 @@ onMounted(async () => {
 }
 
 @media (max-width: 720px) {
-  .hero h1 { font-size: 34px; }
+  .hero-logo { height: 125px; }
+  .schema-image-frame {
+    height: 74vw;
+    min-height: 300px;
+  }
+  .stats-strip {
+    padding: 34px 0 44px;
+  }
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .stat-card {
+    min-height: 118px;
+    padding: 18px 16px;
+    gap: 13px;
+  }
+  .stat-icon {
+    width: 46px;
+    height: 46px;
+    margin-bottom: 0;
+  }
+  .stat-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .stat-number {
+    font-size: 26px;
+  }
+  .stat-label {
+    margin-top: 4px;
+    font-size: 14px;
+  }
+  .stat-text p {
+    display: none;
+    font-size: 12.5px;
   }
   .search-bar {
     min-height: 54px;
