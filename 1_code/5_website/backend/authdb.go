@@ -75,6 +75,44 @@ func NewAuthDB() (*AuthDB, error) {
 			official_free_count INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (user_id, usage_date)
 		);
+		CREATE TABLE IF NOT EXISTS community_submissions (
+			seq INTEGER PRIMARY KEY AUTOINCREMENT,
+			id TEXT NOT NULL DEFAULT '',
+			user_id TEXT NOT NULL REFERENCES users(id),
+			title TEXT NOT NULL,
+			phenotype TEXT NOT NULL,
+			phenotype_id TEXT NOT NULL DEFAULT '',
+			study_design TEXT NOT NULL,
+			sample_size INTEGER NOT NULL,
+			biospecimen TEXT NOT NULL,
+			ms2_supported TEXT NOT NULL,
+			chromatography TEXT NOT NULL,
+			mass_spectrometry TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			doi TEXT NOT NULL DEFAULT '',
+			source_link TEXT NOT NULL DEFAULT '',
+			contact_name TEXT NOT NULL,
+			contact_email TEXT NOT NULL,
+			notes TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'submitted',
+			inclusion TEXT NOT NULL DEFAULT 'pending',
+			phenomap_link TEXT NOT NULL DEFAULT '',
+			admin_notes TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_community_submissions_id ON community_submissions(id);
+		CREATE INDEX IF NOT EXISTS idx_community_submissions_user ON community_submissions(user_id);
+		CREATE TABLE IF NOT EXISTS community_submission_files (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			submission_id TEXT NOT NULL REFERENCES community_submissions(id),
+			file_key TEXT NOT NULL,
+			original_name TEXT NOT NULL,
+			stored_path TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		);
+		CREATE INDEX IF NOT EXISTS idx_community_files_submission ON community_submission_files(submission_id);
 		`
 	if _, err := db.ExecContext(context.Background(), schema); err != nil {
 		return nil, fmt.Errorf("create auth schema: %w", err)

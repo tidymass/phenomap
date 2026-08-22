@@ -1,12 +1,25 @@
 # Generate PhenoMAP Metabolite entity table.
 #
+# Unlike the other three 1_tidy_entity scripts, this one does not depend on
+# which studies are in the current delivery -- its only input is the
+# featuremap MRN reference resource (the shared compound library), not any
+# per-study output. So it only needs re-running when that MRN resource
+# itself is updated, not every time new studies are merged in; 04's
+# metabolite_id_map lookup just needs nodes_metabolite.csv to already exist
+# on disk from a prior run.
+#
+# Runs SECOND among the 1_tidy_entity scripts (order: 01_tidy_phenotype_entity.R
+# -> 02 (this) -> 03_tidy_study_entity.R -> 04_tidy_module_entity.R), but has
+# no ordering dependency on 01/03 -- it's placed here only because 04 needs
+# its output.
+#
 # Output:
 #   nodes_metabolite.csv
 #
 # Source: featuremap MRN resource nodes (igraph or tbl_graph).
 # ID: PMAP_META_xxxx assigned by compound name alphabetical order.
 
-source(file.path("1_code", "1_tidy_entity", "00_entity_helpers.R"))
+source(file.path("1_code", "00_phenomap_helpers.R"))
 
 build_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entity")) {
   mrn <- phenomap_try_load_featuremap_resource("mrn")
@@ -23,17 +36,11 @@ build_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entit
   inchi <- phenomap_col(nodes, "INCHI_ID")
   name  <- phenomap_col(nodes, "Compound_name", phenomap_col(nodes, "Compound.name"))
 
-  clean <- function(x) {
-    x <- as.character(x)
-    x[!nzchar(x) | toupper(x) %in% c("NA", "<NA>")] <- NA
-    x
-  }
-
   out <- data.frame(
-    inchi_id       = clean(inchi),
-    hmdb_id        = clean(hmdb),
-    kegg_id        = clean(kegg),
-    metabolite_name = clean(name),
+    inchi_id       = phenomap_clean_vec(inchi),
+    hmdb_id        = phenomap_clean_vec(hmdb),
+    kegg_id        = phenomap_clean_vec(kegg),
+    metabolite_name = phenomap_clean_vec(name),
     hmdb_chemical_class = phenomap_col(nodes, "hmdb_chemical_class", NA_character_),
     kegg_chemical_class = phenomap_col(nodes, "kegg_chemical_class", NA_character_),
     origin         = phenomap_col(nodes, "origin", NA_character_),
@@ -98,7 +105,13 @@ build_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entit
 format_metabolite_entity <- function(output_dir = file.path("2_data", "tidy_entity")) {
   path <- file.path(output_dir, "nodes_metabolite.csv")
   out <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
-  out$Lab_ID <- sprintf("PMAP_METAB_%06d", seq_len(nrow(out)))
+  # inchi_id is a globally unique, permanent natural key for a metabolite --
+  # unlike the intermediate `id` (PMAP_META_####, assigned purely by
+  # alphabetical row position within this run and discarded below), it
+  # doubles directly as the stable-ID registry key.
+  out$Lab_ID <- phenomap_assign_stable_ids(
+    out$inchi_id, "PME", file.path(output_dir, "metabolite_id_registry.csv")
+  )
   out$id <- NULL
   names(out) <- c(
     metabolite_name = "Metabolite_Name",

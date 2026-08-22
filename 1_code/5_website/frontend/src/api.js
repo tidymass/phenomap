@@ -128,6 +128,36 @@ export function submitContact(payload) {
   return postJSON('/api/contact', payload)
 }
 
+// Lists the signed-in user's Community page study-data submissions, most
+// recent first. Each entry includes its attached files (see
+// backend/community.go for the shape). 401s if not signed in.
+export function listCommunitySubmissions() {
+  return getJSON('/api/community/submissions')
+}
+
+// Submits the Community page's "New submission" form. formData is a
+// browser FormData built by the caller with the text fields (title,
+// phenotype, phenotype_id, study_design, sample_size, biospecimen,
+// ms2_supported, chromatography, mass_spectrometry, summary, doi,
+// source_link, contact_name, contact_email, notes) and up to three files
+// under keys feature_table / sample_metadata / metabolite_annotation
+// (feature_table and sample_metadata are required). Returns the created
+// submission. Deliberately bypasses postJSON -- multipart/form-data needs
+// the browser to set its own Content-Type boundary, not
+// 'application/json'.
+export async function submitCommunityStudy(formData) {
+  const res = await fetch(`${BASE_URL}/api/community/submissions`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || `Request failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 // Sends one turn and streams its progress rather than waiting silently for
 // the whole thing. The backend now runs a 3-stage pipeline per turn
 // (relevance check, intent classification, execution) and streams

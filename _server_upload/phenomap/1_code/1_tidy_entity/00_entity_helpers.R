@@ -10,6 +10,20 @@ phenomap_parse_args <- function(default_output_dir = file.path("2_data", "tidy_e
   args <- commandArgs(trailingOnly = TRUE)
   out <- list(
     case_root = file.path("..", "featuremap_case", "2_data", "case_metabolights"),
+    # PhenoMAP now integrates two source databases (Metabolomics Workbench =
+    # "mw", MetaboLights = "ml") in a single run. Scripts that need to read
+    # study folders from both databases at once (the 1_tidy_entity /
+    # 2_tidy_relationship scripts that build combined node/edge tables) take
+    # one case_root per database instead of a single case_root, so nothing
+    # has to be merged on disk beforehand. Scripts that only ever look at one
+    # database at a time (the 0_prepare_raw scripts) still use the plain
+    # case_root above and are simply invoked once per database with
+    # different --case_root/--output_dir values. These two keys default to
+    # "" and are simply unused by scripts that don't reference them.
+    case_root_mw = "",
+    case_root_ml = "",
+    repository_mw = "Metabolomics Workbench",
+    repository_ml = "MetaboLights",
     output_dir = default_output_dir,
     workers = max(1L, parallel::detectCores(logical = FALSE) - 1L),
     use_llm = TRUE,
@@ -67,20 +81,132 @@ phenomap_read_json <- function(path) {
   jsonlite::fromJSON(path, simplifyVector = FALSE)
 }
 
-phenomap_case_dirs <- function(case_root, require_meta = FALSE, require_res = FALSE) {
+phenomap_case_dirs <- function(case_root, require_meta = FALSE, require_res = FALSE,
+                               require_res_sig = FALSE, case_control_only = FALSE,
+                               exclude_report_path = NULL) {
   if (!dir.exists(case_root)) stop("case_root does not exist: ", case_root)
   dirs <- list.dirs(case_root, recursive = FALSE, full.names = TRUE)
-  if (isTRUE(require_meta)) {
+  if (isTRUE(require_meta) || isTRUE(case_control_only)) {
     dirs <- dirs[file.exists(file.path(dirs, "study_meta.json"))]
   }
   if (isTRUE(require_res)) {
     dirs <- dirs[file.exists(file.path(dirs, "anno_result", "res.rda"))]
   }
+  if (isTRUE(require_res_sig)) {
+    dirs <- dirs[file.exists(file.path(dirs, "anno_result", "res_sig.rda"))]
+  }
+  if (isTRUE(case_control_only)) {
+    dirs <- phenomap_filter_case_control_dirs(dirs, exclude_report_path = exclude_report_path)
+  }
   sort(dirs)
+}
+
+# PhenoMAP is currently scoped to case-control studies only (continuous-
+# variable studies will be added in a later delivery). This checks each
+# study's design_type -- tolerating both the old nested study_meta.json shape
+# (`study_design.design_type`) and the new flat shape (`design_type` at the
+# top level, used by the 2026-08-19 delivery for both mw and ml) -- and
+# drops anything that isn't "binary_case_control". Excluded studies are never
+# silently dropped: if exclude_report_path is given, they're written out so
+# it's visible what got excluded and why (this matters once continuous-
+# variable studies start showing up in future deliveries).
+phenomap_filter_case_control_dirs <- function(case_dirs, exclude_report_path = NULL) {
+  if (length(case_dirs) == 0) return(case_dirs)
+
+  keep <- logical(length(case_dirs))
+  excluded_rows <- vector("list", length(case_dirs))
+
+  for (i in seq_along(case_dirs)) {
+    meta <- phenomap_read_json(file.path(case_dirs[[i]], "study_meta.json"))
+    design_type <- phenomap_clean_scalar(meta$study_design$design_type %||% meta$design_type)
+    is_case_control <- !is.na(design_type) && identical(design_type, "binary_case_control")
+    keep[[i]] <- is_case_control
+    if (!is_case_control) {
+      excluded_rows[[i]] <- data.frame(
+        case_dir = case_dirs[[i]],
+        study_id = phenomap_clean_scalar(meta$study_id, basename(case_dirs[[i]])),
+        design_type = design_type,
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+
+  excluded_rows <- excluded_rows[!vapply(excluded_rows, is.null, logical(1))]
+  if (length(excluded_rows) > 0) {
+    excluded <- do.call(rbind, excluded_rows)
+    message(
+      "Excluding ", nrow(excluded), " non-case-control (or design_type-less) ",
+      "stud", if (nrow(excluded) == 1) "y" else "ies", " from ", basename(dirname(case_dirs[[1]] %||% "."))
+    )
+    if (!is.null(exclude_report_path)) {
+      phenomap_write_csv(excluded, exclude_report_path)
+      message("Wrote exclusion report: ", exclude_report_path)
+    }
+  }
+
+  case_dirs[keep]
 }
 
 phenomap_case_id <- function(case_dir, meta = NULL) {
   phenomap_clean_scalar(meta$study_id %||% basename(case_dir), basename(case_dir))
+}
+
+# Returns the first argument that cleans to a non-NA scalar. Note this is NOT
+# the same as `%||%`: `%||%` only falls through on NULL/length-0, but
+# phenomap_clean_scalar() turns a missing JSON field into NA_character_ (not
+# NULL), so a chain like `study_design$foo %||% meta$foo` would never reach
+# the fallback once the first field is merely NA. Use this instead whenever
+# the fallback should trigger on NA too.
+phenomap_coalesce_scalar <- function(...) {
+  for (v in list(...)) {
+    v <- phenomap_clean_scalar(v)
+    if (!is.na(v)) return(v)
+  }
+  NA_character_
+}
+
+# study_meta.json has shipped in two incompatible shapes across deliveries:
+#   - workbench_20260629 (old): design/instrument fields nested under
+#     `study_design` / `instrument` objects (e.g. study_design$design_type,
+#     instrument$chromatography_instrument).
+#   - delivery_20260819 (current, both mw and ml): the same information but
+#     flattened to the top level (design_type, case_label, control_label,
+#     biospecimen, column_type, column_notes, polarities, ...), and some old
+#     fields (ms2_supported, instrument$ms_instrument_name) have no
+#     equivalent at all.
+# This is the single place that knows about both shapes, so every script
+# that reads study_meta.json goes through it instead of re-deriving its own
+# fallback chain (and silently drifting out of sync with the others).
+phenomap_read_study_meta_row <- function(meta) {
+  study_design <- meta$study_design %||% list()
+  instrument <- meta$instrument %||% list()
+
+  list(
+    study_title = phenomap_coalesce_scalar(meta$study_title, meta$title),
+    study_summary = phenomap_coalesce_scalar(meta$study_summary, meta$description),
+    design_type = phenomap_coalesce_scalar(study_design$design_type, meta$design_type),
+    case_label = phenomap_coalesce_scalar(study_design$case, meta$case_label),
+    control_label = phenomap_coalesce_scalar(study_design$control, meta$control_label),
+    study_type_raw = phenomap_coalesce_scalar(study_design$study_type_raw, meta$analysis_type),
+    n_samples_analyzed = suppressWarnings(as.integer(
+      phenomap_coalesce_scalar(study_design$n_samples_analyzed, meta$n_samples)
+    )),
+    biospecimen = phenomap_coalesce_scalar(study_design$biospecimen, meta$biospecimen),
+    publication = phenomap_clean_scalar(meta$publication),
+    publication_doi = phenomap_clean_scalar(meta$publication_doi),
+    ms2_supported = isTRUE(meta$ms2_supported),
+    # "_type" fields are short/categorical (used for the GPT prompt);
+    # "_display" fields prefer the more descriptive instrument-level value
+    # and are meant for the Study node's human-readable columns.
+    chromatography_type = phenomap_coalesce_scalar(instrument$chromatography_type, meta$column_type),
+    chromatography_display = phenomap_coalesce_scalar(
+      instrument$chromatography_instrument, meta$column_notes,
+      instrument$chromatography_type, meta$column_type
+    ),
+    ms_instrument_type = phenomap_coalesce_scalar(instrument$ms_instrument_type, meta$analysis_type),
+    ms_instrument_display = phenomap_coalesce_scalar(instrument$ms_instrument_name, meta$analysis_type),
+    ion_mode = phenomap_coalesce_scalar(instrument$ion_mode, phenomap_collapse(meta$polarities))
+  )
 }
 
 phenomap_load_res <- function(case_dir) {
@@ -216,6 +342,77 @@ phenomap_write_csv <- function(df, path) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   utils::write.csv(df, path, row.names = FALSE, na = "")
   invisible(path)
+}
+
+# Resolves a gene symbol to an NCBI Gene ID via the free, keyless NCBI
+# E-utilities API (esearch + esummary). Used for genetic_perturbation-type
+# Phenotype nodes in 02_normalize_workbench_phenotype.R (a full run) and
+# 05_patch_genetic_perturbation_phenotype.R (patching an already-completed
+# run without re-calling GPT) -- kept here, rather than duplicated in both,
+# since both need it. Tries a human-restricted search first (this project's
+# studies are overwhelmingly human), then falls back to an unrestricted
+# search (covers mouse/rat model organisms) before giving up. Returns NULL on
+# no match or any network/parsing failure -- callers should fall back to a
+# name-only Phenotype node in that case, not treat it as fatal.
+phenomap_ncbi_gene_lookup <- function(symbol, base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils") {
+  symbol <- phenomap_clean_scalar(symbol)
+  if (is.na(symbol)) return(NULL)
+  if (!requireNamespace("httr", quietly = TRUE)) stop("Package 'httr' is required.")
+  if (!requireNamespace("jsonlite", quietly = TRUE)) stop("Package 'jsonlite' is required.")
+
+  base_url <- sub("/+$", "", base_url)
+
+  esearch <- function(term) {
+    resp <- tryCatch(
+      httr::GET(
+        paste0(base_url, "/esearch.fcgi"),
+        query = list(db = "gene", term = term, retmode = "json", retmax = 1),
+        httr::timeout(15)
+      ),
+      error = function(e) NULL
+    )
+    if (is.null(resp) || httr::status_code(resp) != 200) return(NULL)
+    parsed <- tryCatch(
+      jsonlite::fromJSON(httr::content(resp, as = "text", encoding = "UTF-8"), simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+    ids <- parsed$esearchresult$idlist
+    if (is.null(ids) || length(ids) == 0) return(NULL)
+    phenomap_clean_scalar(ids[[1]])
+  }
+
+  esummary <- function(gene_id) {
+    resp <- tryCatch(
+      httr::GET(
+        paste0(base_url, "/esummary.fcgi"),
+        query = list(db = "gene", id = gene_id, retmode = "json"),
+        httr::timeout(15)
+      ),
+      error = function(e) NULL
+    )
+    if (is.null(resp) || httr::status_code(resp) != 200) return(NULL)
+    parsed <- tryCatch(
+      jsonlite::fromJSON(httr::content(resp, as = "text", encoding = "UTF-8"), simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+    parsed$result[[as.character(gene_id)]]
+  }
+
+  gene_id <- esearch(paste0(symbol, "[sym] AND Homo sapiens[orgn]"))
+  matched_via <- "symbol+human"
+  if (is.null(gene_id)) {
+    gene_id <- esearch(paste0(symbol, "[sym]"))
+    matched_via <- "symbol"
+  }
+  if (is.null(gene_id)) return(NULL)
+
+  summary <- esummary(gene_id)
+  list(
+    gene_id = gene_id,
+    official_symbol = phenomap_clean_scalar(summary$name),
+    description = phenomap_clean_scalar(summary$description),
+    matched_via = matched_via
+  )
 }
 
 phenomap_try_load_featuremap_resource <- function(name) {

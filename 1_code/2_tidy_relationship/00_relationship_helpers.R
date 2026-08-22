@@ -1,6 +1,6 @@
 # Shared helpers for PhenoMAP relationship table export.
 
-source(file.path("1_code", "1_tidy_entity", "00_entity_helpers.R"))
+source(file.path("1_code", "00_phenomap_helpers.R"))
 
 phenomap_relationship_parse_args <- function(default_output_dir = file.path("2_data", "tidy_relationship")) {
   args <- phenomap_parse_args(default_output_dir = default_output_dir)
@@ -41,12 +41,6 @@ phenomap_relationship_parse_args <- function(default_output_dir = file.path("2_d
 phenomap_read_csv_required <- function(path) {
   if (!file.exists(path)) stop("Required file does not exist: ", path)
   utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
-}
-
-phenomap_drop_empty <- function(x) {
-  if (is.null(x) || length(x) == 0) return(character(0))
-  x <- trimws(as.character(x))
-  x[!is.na(x) & nzchar(x) & !toupper(x) %in% c("NA", "NULL", "NAN", "<NA>")]
 }
 
 phenomap_split_semicolon <- function(x) {

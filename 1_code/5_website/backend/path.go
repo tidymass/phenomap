@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sort"
 )
 
@@ -113,15 +114,45 @@ const subgraphRelationshipsQuery = `
 	       type(r) AS rel_type, properties(r) AS rel_props, nodeCount
 `
 
-// maxBFSVisited caps how many nodes a single traversal will expand to, as a
-// safety valve against extremely well-connected seed nodes -- passed
-// directly as subgraphRelationshipsQuery's `limit` config, so APOC itself
-// stops early once the cap is hit. With Metabolite excluded from traversal
-// entirely, the reachable set is bounded by the curated
-// Study/Phenotype/Module backbone, which should stay well short of this
-// even for well-studied phenotypes -- this is a backstop for pathological
-// cases, not the primary defense.
-const maxBFSVisited = 4000
+// shortestHopsQuery answers "are fromID and toID connected within maxHops,
+// and if so how many hops apart" using Neo4j's native shortestPath -- a
+// bidirectional search that expands simultaneously from both ends and stops
+// the moment the two frontiers meet, rather than exploring the full radius
+// of a single side.
+//
+// This matters a lot on a graph this size: exploring outward from just one
+// node to radius maxHops visits roughly branchingFactor^maxHops nodes, while
+// meeting in the middle from both ends visits roughly
+// 2 * branchingFactor^(maxHops/2) -- for a SIMILAR_TO fan-out in the low
+// tens, the one-sided radius-5 ball around a well-studied phenotype already
+// exceeds the old maxBFSVisited safety cap (confirmed against the current
+// graph: several phenotypes' 5-hop neighborhoods run 4000-4800+ nodes,
+// meaning "no connection found" was sometimes a false negative from hitting
+// that cap, not an actual absence of a path). The bidirectional search below
+// has no such cap and stays cheap regardless of graph size, because its cost
+// depends on maxHops/2, not maxHops -- this is the query that should decide
+// connectivity and hop count, full stop.
+//
+// maxHops has to be interpolated into the pattern (Cypher's variable-length
+// relationship bound isn't parameterizable) -- safe here because maxHops is
+// an int clamped server-side in FindPathGraph, never raw user input.
+func shortestHopsQuery(maxHops int) string {
+	return fmt.Sprintf(`
+		MATCH (a {Lab_ID: $fromId}), (b {Lab_ID: $toId})
+		OPTIONAL MATCH p = shortestPath((a)-[:INVESTIGATED|REPORTED_IN|SIMILAR_TO*..%d]-(b))
+		RETURN length(p) AS hops
+	`, maxHops)
+}
+
+// maxBFSVisited caps how many nodes the *visualization* subgraph fetch
+// (subgraphRelationshipsQuery, below) will expand to. It is no longer what
+// decides whether two nodes are connected -- shortestHopsQuery answers that
+// cheaply and exactly, with no cap of its own. This constant only bounds how
+// much of the connection subgraph gets rendered once we already know a path
+// exists: if it's hit, Truncated is set and some legitimate edges near a
+// very well-connected endpoint may be missing from the picture, but the
+// reported Hops count and the yes/no answer are unaffected either way.
+const maxBFSVisited = 8000
 
 const defaultPathHops = 5
 const maxPathHops = 10
@@ -252,6 +283,34 @@ func (db *DB) FindPathGraph(ctx context.Context, fromLabel, fromID, toLabel, toI
 		return &PathGraph{Nodes: []PathGraphNode{}, Edges: []PathGraphEdge{}}, nil
 	}
 
+	// Decide connectivity and true hop count first, with the cheap
+	// bidirectional query -- before spending anything on the (much more
+	// expensive) full subgraph fetch below. If the two nodes simply aren't
+	// connected within maxHops, this is the entire query: no point walking
+	// a multi-thousand-node neighborhood just to confirm a "no".
+	hopsRows, err := db.query(ctx, shortestHopsQuery(maxHops), map[string]any{
+		"fromId": fromID,
+		"toId":   toID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var hops *int64
+	if len(hopsRows) > 0 && hopsRows[0]["hops"] != nil {
+		h := asInt64(hopsRows[0]["hops"])
+		hops = &h
+	}
+	if hops == nil {
+		return &PathGraph{
+			Nodes: []PathGraphNode{
+				{Label: fromLabel, ID: fromID, Name: fromName},
+				{Label: toLabel, ID: toID, Name: toName},
+			},
+			Edges: []PathGraphEdge{},
+			Hops:  nil,
+		}, nil
+	}
+
 	rows, err := db.query(ctx, subgraphRelationshipsQuery, map[string]any{
 		"id":      fromID,
 		"maxHops": int64(maxHops),
@@ -277,19 +336,16 @@ func (db *DB) FindPathGraph(ctx context.Context, fromLabel, fromID, toLabel, toI
 	}
 	// subgraphAll's limit caps the induced subgraph at maxBFSVisited nodes;
 	// hitting that exactly is the signal that fromID's neighborhood is
-	// larger than what got explored, so some legitimate connections may be
-	// missing. With zero edges returned there's nothing to have truncated.
+	// larger than what got explored, so the *visualization* may be missing
+	// some legitimate edges. It no longer means the connection itself is in
+	// doubt -- shortestHopsQuery above already settled that with an exact,
+	// uncapped answer, so a truncated fetch here just means "fewer edges
+	// drawn," never "path might not exist."
 	truncated := len(rawEdges) > 0 && nodeCount >= maxBFSVisited
 
 	adj := buildAdjacency(rawEdges)
 	distA := bfsLocal(fromID, adj, maxHops)
 	distB := bfsLocal(toID, adj, maxHops)
-
-	var hops *int64
-	if d, ok := distA[toID]; ok && d <= maxHops {
-		h := int64(d)
-		hops = &h
-	}
 
 	type candidateEdge struct {
 		edge           PathGraphEdge

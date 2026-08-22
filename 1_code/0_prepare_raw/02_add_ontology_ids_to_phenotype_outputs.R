@@ -1,22 +1,34 @@
-# Add per-ontology candidate IDs to existing Workbench phenotype outputs.
+# Add per-ontology candidate IDs to existing phenotype-normalization outputs.
+#
+# (Originally 03_add_ontology_ids_to_workbench_phenotype_outputs.R -- renamed
+# for the same reason as 01_normalize_study_phenotype.R: this post-processes
+# output from either database, not just Workbench. Renumbered to this file's
+# current 02_ once 0_prepare_raw/'s numbering was cleaned up to run 01-04
+# with no gaps.)
 #
 # This post-processes files produced by:
-#   1_code/0_prepare_raw/02_normalize_workbench_phenotype.R
+#   1_code/0_prepare_raw/01_normalize_study_phenotype.R
 #
-# It does not call GPT or OLS. It reads phenotype_ols_candidates.csv and merges
-# per-study MONDO/EFO/MeSH/HPO candidate IDs into final/review/all tables.
+# It does not call GPT or OLS. It reads phenotype_ols_candidates.csv and
+# merges per-study MONDO/EFO/MeSH/HPO/... candidate IDs into the final/
+# review/all tables, using the exact same summarizer
+# (phenomap_summarize_ontology_candidates_by_study(), in
+# 1_code/00_phenomap_helpers.R) that 01 itself uses -- so this
+# script's output can never drift out of sync with what 01 already wrote.
 # The main CSV files are kept compact for manual review.
 #
 # Usage:
-#   Rscript 1_code/0_prepare_raw/03_add_ontology_ids_to_workbench_phenotype_outputs.R
-#   Rscript 1_code/0_prepare_raw/03_add_ontology_ids_to_workbench_phenotype_outputs.R --overwrite=FALSE
+#   Rscript 1_code/0_prepare_raw/02_add_ontology_ids_to_phenotype_outputs.R \
+#     --output_dir=2_data/raw/delivery_20260819/phenotype_normalization_mw
+#   Rscript 1_code/0_prepare_raw/02_add_ontology_ids_to_phenotype_outputs.R \
+#     --output_dir=2_data/raw/delivery_20260819/phenotype_normalization_ml --overwrite=FALSE
 
-source(file.path("1_code", "1_tidy_entity", "00_entity_helpers.R"))
+source(file.path("1_code", "00_phenomap_helpers.R"))
 
 parse_add_ontology_ids_args <- function() {
   raw <- commandArgs(trailingOnly = TRUE)
   args <- list(
-    output_dir = file.path("2_data", "raw", "workbench_20260629", "phenotype_normalization"),
+    output_dir = NA_character_,
     max_per_ontology = 10L,
     overwrite = TRUE
   )
@@ -29,6 +41,12 @@ parse_add_ontology_ids_args <- function() {
     if (key %in% names(args)) args[[key]] <- value
   }
 
+  # No default output_dir -- see 01_normalize_study_phenotype.R's arg parser
+  # for why a dated delivery folder should never be a hardcoded default.
+  if (is.na(args$output_dir) || !nzchar(args$output_dir)) {
+    stop("--output_dir is required, e.g. --output_dir=2_data/raw/<delivery>/phenotype_normalization_mw")
+  }
+
   args$max_per_ontology <- suppressWarnings(as.integer(args$max_per_ontology))
   if (is.na(args$max_per_ontology) || args$max_per_ontology < 1L) args$max_per_ontology <- 10L
   args$overwrite <- as.logical(args$overwrite)
@@ -36,51 +54,14 @@ parse_add_ontology_ids_args <- function() {
   args
 }
 
-summarize_ontology_candidates_by_study <- function(ontology_candidates, max_per_ontology = 10L) {
-  if (!is.data.frame(ontology_candidates) || nrow(ontology_candidates) == 0) {
-    return(data.frame(study_id = character(0), stringsAsFactors = FALSE))
-  }
-
-  ontology_candidates$id_source <- tolower(sub(":.*$", "", ontology_candidates$ontology_id))
-  ontology_candidates$id_source <- gsub("[^a-z0-9]+", "_", ontology_candidates$id_source)
-  source_order <- c("mondo", "efo", "mesh", "hp", sort(setdiff(unique(ontology_candidates$id_source), c("mondo", "efo", "mesh", "hp"))))
-  output_prefix <- ifelse(source_order == "hp", "hpo", source_order)
-
-  ontology_candidates <- ontology_candidates[
-    order(ontology_candidates$study_id, ontology_candidates$id_source, -ontology_candidates$rule_score, ontology_candidates$rank),
-    ,
-    drop = FALSE
-  ]
-
-  rows <- lapply(sort(unique(ontology_candidates$study_id)), function(study_id) {
-    study_hits <- ontology_candidates[ontology_candidates$study_id == study_id, , drop = FALSE]
-    row <- data.frame(study_id = study_id, stringsAsFactors = FALSE)
-
-    for (i in seq_along(source_order)) {
-      source <- source_order[[i]]
-      prefix <- output_prefix[[i]]
-      hits <- study_hits[study_hits$id_source == source, , drop = FALSE]
-      if (nrow(hits) > 0) {
-        hits <- hits[!duplicated(hits$ontology_id), , drop = FALSE]
-        hits <- head(hits, max_per_ontology)
-      }
-
-      row[[paste0(prefix, "_ids")]] <- phenomap_collapse(hits$ontology_id)
-      row[[paste0(prefix, "_labels")]] <- phenomap_collapse(hits$ontology_label)
-      row[[paste0(prefix, "_queries")]] <- phenomap_collapse(hits$query)
-      row[[paste0(prefix, "_match_types")]] <- phenomap_collapse(hits$rule_match_type)
-      row[[paste0(prefix, "_rule_scores")]] <- phenomap_collapse(hits$rule_score)
-    }
-
-    row
-  })
-
-  do.call(rbind, rows)
-}
-
 drop_existing_summary_cols <- function(df) {
+  # NOTE: this whitelist must stay complete -- it must cover every source
+  # phenomap_ontology_scope_by_type (in 01_normalize_study_phenotype.R)
+  # actually searches, or a re-run will fail to drop the OLD *_ids/_labels/
+  # ... summary columns for a source before merging in the new summary,
+  # producing duplicate ".x"/".y" columns.
   prefixes <- c(
-    "mondo", "efo", "mesh", "hpo", "bto", "chebi", "cl", "clo", "ecto",
+    "mondo", "efo", "mesh", "hpo", "ncit", "bto", "chebi", "cl", "clo", "ecto",
     "eo", "gene", "go", "hancestro", "hsapdv", "maxo", "mpath",
     "ncbitaxon", "oba", "orphanet", "po", "pr", "uberon"
   )
@@ -141,15 +122,15 @@ augment_one_table <- function(path, ontology_summary, overwrite = TRUE, clean_ma
   invisible(out_path)
 }
 
-add_ontology_ids_to_workbench_phenotype_outputs <- function(output_dir = file.path("2_data", "raw", "workbench_20260629", "phenotype_normalization"),
-                                                            max_per_ontology = 10L,
-                                                            overwrite = TRUE,
-                                                            clean_main = TRUE) {
+add_ontology_ids_to_phenotype_outputs <- function(output_dir,
+                                                  max_per_ontology = 10L,
+                                                  overwrite = TRUE,
+                                                  clean_main = TRUE) {
   ols_path <- file.path(output_dir, "phenotype_ols_candidates.csv")
   if (!file.exists(ols_path)) stop("Missing OLS candidates file: ", ols_path)
 
   ontology_candidates <- utils::read.csv(ols_path, stringsAsFactors = FALSE, check.names = FALSE)
-  ontology_summary <- summarize_ontology_candidates_by_study(
+  ontology_summary <- phenomap_summarize_ontology_candidates_by_study(
     ontology_candidates = ontology_candidates,
     max_per_ontology = max_per_ontology
   )
@@ -173,7 +154,7 @@ add_ontology_ids_to_workbench_phenotype_outputs <- function(output_dir = file.pa
 
 if (identical(environment(), globalenv()) && !interactive()) {
   args <- parse_add_ontology_ids_args()
-  add_ontology_ids_to_workbench_phenotype_outputs(
+  add_ontology_ids_to_phenotype_outputs(
     output_dir = args$output_dir,
     max_per_ontology = args$max_per_ontology,
     overwrite = args$overwrite

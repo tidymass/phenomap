@@ -15,7 +15,7 @@
               id="me-ids"
               v-model="idsText"
               rows="6"
-              placeholder="One ID per line (or comma / space separated), e.g.&#10;PMAP_METAB_000901&#10;PMAP_METAB_001643&#10;PMAP_METAB_006406"
+              placeholder="One ID per line (or comma / space separated), e.g.&#10;PME002024&#10;PME005472&#10;PME005806"
             ></textarea>
             <div class="me-examples" aria-label="Example module enrichment inputs">
               <span>Examples</span>
@@ -542,7 +542,7 @@ const enrichmentDemos = [
     label: '#1',
     title: 'Lab ID example: Nucleotide metabolism',
     idType: 'lab_id',
-    ids: ['PMAP_METAB_000901', 'PMAP_METAB_001643', 'PMAP_METAB_003944', 'PMAP_METAB_004084', 'PMAP_METAB_006406'],
+    ids: ['PME002024', 'PME005472', 'PME005806', 'PME006584', 'PME007707'],
   },
   {
     label: '#2',

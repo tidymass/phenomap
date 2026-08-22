@@ -430,26 +430,26 @@ const pathDemos = [
   {
     label: '#1',
     hops: 5,
-    from: { label: 'Phenotype', id: 'PMAP_PHENO_000131', name: 'ulcerative colitis' },
-    to: { label: 'Phenotype', id: 'PMAP_PHENO_000082', name: 'macrophage differentiation' },
+    from: { label: 'Phenotype', id: 'PPH000216', name: 'Urinary bladder cancer' },
+    to: { label: 'Phenotype', id: 'PPH000098', name: 'Hepatocellular carcinoma' },
   },
   {
     label: '#2',
     hops: 3,
-    from: { label: 'Study', id: 'PMAP_STUDY_000132', name: 'ST003865' },
-    to: { label: 'Study', id: 'PMAP_STUDY_000151', name: 'ST004308' },
+    from: { label: 'Study', id: 'PST000252', name: 'ST003865' },
+    to: { label: 'Study', id: 'PST000271', name: 'ST004308' },
   },
   {
     label: '#3',
     hops: 5,
-    from: { label: 'Phenotype', id: 'PMAP_PHENO_000061', name: 'hepatocellular carcinoma' },
-    to: { label: 'Phenotype', id: 'PMAP_PHENO_000046', name: 'estrogen-receptor positive breast cancer' },
+    from: { label: 'Phenotype', id: 'PPH000161', name: 'Pancreatic ductal adenocarcinoma' },
+    to: { label: 'Phenotype', id: 'PPH000027', name: 'Breast cancer' },
   },
   {
     label: '#4',
     hops: 3,
-    from: { label: 'Phenotype', id: 'PMAP_PHENO_000131', name: 'ulcerative colitis' },
-    to: { label: 'Module', id: 'PMAP_MOUDLE_001855', name: 'Bacterial cell wall biosynthesis and shikimate pathway' },
+    from: { label: 'Phenotype', id: 'PPH000213', name: 'Ulcerative colitis' },
+    to: { label: 'Module', id: 'PMO003724', name: 'Bacterial cell wall biosynthesis and shikimate pathway' },
   },
 ]
 

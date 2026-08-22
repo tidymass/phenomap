@@ -25,8 +25,14 @@ build_metabolite_metabolite_relationship <- function(entity_dir = file.path("2_d
                out$Metabolite_ID_1 != out$Metabolite_ID_2, , drop = FALSE]
   out <- out[!duplicated(out), , drop = FALSE]
   out <- out[order(out$Metabolite_ID_1, out$Metabolite_ID_2), , drop = FALSE]
+  # Metabolite_ID_1/2 are already pmin/pmax-normalized, permanent Metabolite
+  # Lab_IDs, so the pair itself is a stable natural key across reruns -- see
+  # phenomap_assign_stable_ids()'s header comment in 00_phenomap_helpers.R.
+  edge_key <- paste(out$Metabolite_ID_1, out$Metabolite_ID_2)
   out <- data.frame(
-    Lab_ID = sprintf("MET_MET_%06d", seq_len(nrow(out))),
+    Lab_ID = phenomap_assign_stable_ids(
+      edge_key, "MET_MET_", file.path(output_dir, "metabolite_metabolite_edge_id_registry.csv")
+    ),
     Metabolite_ID_1 = out$Metabolite_ID_1,
     Relationship = "connected with",
     Metabolite_ID_2 = out$Metabolite_ID_2,

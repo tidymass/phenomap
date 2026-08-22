@@ -5,30 +5,6 @@
 
 source(file.path("1_code", "2_tidy_relationship", "00_relationship_helpers.R"))
 
-load_res_sig <- function(case_dir) {
-  path <- file.path(case_dir, "anno_result", "res_sig.rda")
-  if (!file.exists(path)) return(NULL)
-
-  env <- new.env(parent = emptyenv())
-  object_names <- load(path, envir = env)
-  if ("res_sig" %in% object_names) return(env$res_sig)
-
-  for (nm in object_names) {
-    obj <- env[[nm]]
-    if (!is.null(obj$object_type) && identical(obj$object_type, "featuremap_result")) {
-      return(obj)
-    }
-  }
-  env[[object_names[[1]]]]
-}
-
-split_ids <- function(x) {
-  ids <- phenomap_drop_empty(x)
-  if (length(ids) == 0) return(character(0))
-  ids <- phenomap_drop_empty(unlist(strsplit(ids, ";", fixed = TRUE), use.names = FALSE))
-  unique(ids[nzchar(ids)])
-}
-
 read_study_id_map <- function(entity_dir) {
   study <- phenomap_read_csv_required(file.path(entity_dir, "nodes_study.csv"))
   if (!all(c("Lab_ID", "Accession") %in% colnames(study))) {
@@ -64,7 +40,7 @@ build_metabolite_module_relationship_one_case <- function(case_dir,
     return(data.frame())
   }
 
-  res <- load_res_sig(case_dir)
+  res <- phenomap_load_res_sig(case_dir)
   module_function <- phenomap_safe_df(res$module_function)
   module_table <- phenomap_safe_df(res$module_table)
   if (nrow(module_function) == 0 || nrow(module_table) == 0) return(data.frame())
@@ -81,9 +57,9 @@ build_metabolite_module_relationship_one_case <- function(case_dir,
     module_lab_id <- unname(module_id_map[paste(study_lab_id, local_module_id, sep = "||")])
     if (length(module_lab_id) == 0 || is.na(module_lab_id) || !nzchar(module_lab_id)) next
 
-    all_ids <- split_ids(module_table$INCHI_ID[module_table$Module == local_module_id])
-    anchor_ids <- intersect(split_ids(module_function$anchor_metabolite_ids[[i]]), all_ids)
-    top_ids <- setdiff(intersect(split_ids(module_function$top_metabolite_ids[[i]]), all_ids), anchor_ids)
+    all_ids <- phenomap_split_ids(module_table$INCHI_ID[module_table$Module == local_module_id])
+    anchor_ids <- intersect(phenomap_split_ids(module_function$anchor_metabolite_ids[[i]]), all_ids)
+    top_ids <- setdiff(intersect(phenomap_split_ids(module_function$top_metabolite_ids[[i]]), all_ids), anchor_ids)
     contextual_ids <- setdiff(all_ids, union(anchor_ids, top_ids))
 
     typed_ids <- list(
@@ -113,24 +89,60 @@ build_metabolite_module_relationship_one_case <- function(case_dir,
 }
 
 build_metabolite_module_relationship <- function(
-  case_root = file.path("2_data", "raw", "workbench_20260629", "update_res_only_260705"),
+  case_root_mw,
+  case_root_ml,
   entity_dir = file.path("2_data", "tidy_entity"),
-  output_dir = file.path("2_data", "tidy_relationship")
+  output_dir = file.path("2_data", "tidy_relationship"),
+  workers = max(1L, parallel::detectCores(logical = FALSE) - 1L)
 ) {
+  if (!nzchar(case_root_mw) || !nzchar(case_root_ml)) {
+    stop("Both --case_root_mw and --case_root_ml must be provided.")
+  }
   study_id_map <- read_study_id_map(entity_dir)
   module_id_map <- read_module_id_map(entity_dir)
   metabolite_id_map <- read_metabolite_id_map(entity_dir)
 
-  case_dirs <- list.dirs(case_root, recursive = FALSE, full.names = TRUE)
-  case_dirs <- case_dirs[file.exists(file.path(case_dirs, "anno_result", "res_sig.rda"))]
-
-  rows <- lapply(
-    case_dirs,
-    build_metabolite_module_relationship_one_case,
-    study_id_map = study_id_map,
-    module_id_map = module_id_map,
-    metabolite_id_map = metabolite_id_map
+  # As in 04_tidy_module_entity.R: any study not in nodes_study.csv has no
+  # study_lab_id to join against and is skipped per-case below, so this
+  # doesn't need to re-apply the case-control filter itself.
+  case_dirs <- c(
+    phenomap_case_dirs(case_root_mw, require_res_sig = TRUE),
+    phenomap_case_dirs(case_root_ml, require_res_sig = TRUE)
   )
+
+  # Defensive coercion: phenomap_relationship_parse_args() re-parses raw CLI
+  # args after phenomap_parse_args() already type-converts `workers`, and
+  # that second pass overwrites it with the raw (uncoerced) string -- e.g.
+  # --workers=6 arrives here as "6", not 6L. Sanitize whatever came in
+  # rather than trusting the caller's type (same fix as
+  # 05_tidy_module_module_relationship.R).
+  workers <- suppressWarnings(as.integer(workers))
+  if (is.na(workers) || workers < 1L) {
+    workers <- max(1L, parallel::detectCores(logical = FALSE) - 1L)
+  }
+
+  # Same embarrassingly-parallel shape as 1_tidy_entity/04_tidy_module_entity.R
+  # (each case_dir's res_sig.rda load is independent, no external calls to
+  # rate-limit) -- same mclapply-with-serial-fallback convention.
+  use_workers <- if (.Platform$OS.type == "unix") max(1L, workers) else 1L
+  rows <- if (use_workers > 1L) {
+    parallel::mclapply(
+      case_dirs,
+      build_metabolite_module_relationship_one_case,
+      study_id_map = study_id_map,
+      module_id_map = module_id_map,
+      metabolite_id_map = metabolite_id_map,
+      mc.cores = use_workers
+    )
+  } else {
+    lapply(
+      case_dirs,
+      build_metabolite_module_relationship_one_case,
+      study_id_map = study_id_map,
+      module_id_map = module_id_map,
+      metabolite_id_map = metabolite_id_map
+    )
+  }
   rows <- rows[vapply(rows, function(x) is.data.frame(x) && nrow(x) > 0, logical(1))]
 
   if (length(rows) == 0) {
@@ -140,8 +152,13 @@ build_metabolite_module_relationship <- function(
     out <- out[!duplicated(out[, c("Metabolite_ID", "Module_ID")]), , drop = FALSE]
     type_order <- match(out$Type, c("core", "supporting", "contextual"))
     out <- out[order(out$Module_ID, type_order, out$Metabolite_ID), , drop = FALSE]
+    # Metabolite_ID + Module_ID are already permanent, stable Lab_IDs, so
+    # the (already deduped) pair is a stable natural key across reruns.
+    edge_key <- paste(out$Metabolite_ID, out$Module_ID)
     out <- data.frame(
-      Lab_ID = sprintf("MET_MOD_%06d", seq_len(nrow(out))),
+      Lab_ID = phenomap_assign_stable_ids(
+        edge_key, "MET_MOD_", file.path(output_dir, "metabolite_module_edge_id_registry.csv")
+      ),
       out,
       stringsAsFactors = FALSE
     )
@@ -153,12 +170,11 @@ build_metabolite_module_relationship <- function(
 
 if (identical(environment(), globalenv()) && !interactive()) {
   args <- phenomap_relationship_parse_args()
-  if (identical(args$case_root, file.path("..", "featuremap_case", "2_data", "case_metabolights"))) {
-    args$case_root <- file.path("2_data", "raw", "workbench_20260629", "update_res_only_260705")
-  }
   build_metabolite_module_relationship(
-    case_root = args$case_root,
+    case_root_mw = args$case_root_mw,
+    case_root_ml = args$case_root_ml,
     entity_dir = args$entity_dir,
-    output_dir = args$relationship_dir
+    output_dir = args$relationship_dir,
+    workers = args$workers
   )
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/smtp"
 	"os"
+	"strings"
 )
 
 // EmailConfig holds SMTP settings for sending verification emails.
@@ -115,6 +116,44 @@ func (c EmailConfig) sendAccountDeletionConfirmation(toEmail, token string) erro
 	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
 	addr := c.Host + ":" + c.Port
 	return smtp.SendMail(addr, auth, c.From, []string{toEmail}, []byte(msg))
+}
+
+// sendCommunitySubmissionNotice emails contactRecipient whenever someone
+// submits study data through the Community page, so a new submission
+// doesn't just sit unnoticed in the database until a curator happens to
+// check -- review of the submission itself is still a manual, offline
+// process (see community.go), this just makes sure someone finds out.
+// Reply-To is the submitter's contact email, matching sendContactMessage.
+func (c EmailConfig) sendCommunitySubmissionNotice(user *User, s *CommunitySubmission) error {
+	fileNames := make([]string, 0, len(s.Files))
+	for _, f := range s.Files {
+		fileNames = append(fileNames, f.Name)
+	}
+
+	subject := fmt.Sprintf("PhenoMAP community submission %s: %s", s.ID, s.Title)
+	body := fmt.Sprintf(
+		"New study data submission for review.\r\n\r\n"+
+			"Submission ID: %s\r\nSubmitted by: %s <%s>\r\n\r\n"+
+			"Title: %s\r\nPhenotype: %s (%s)\r\nStudy design: %s\r\nSample size: %d\r\n"+
+			"Biospecimen: %s\r\nMS2 support: %s\r\nChromatography: %s\r\nMass spectrometry: %s\r\n\r\n"+
+			"Summary:\r\n%s\r\n\r\n"+
+			"DOI: %s\r\nSource link: %s\r\nContact: %s <%s>\r\nReviewer notes: %s\r\n\r\n"+
+			"Files: %s\r\n",
+		s.ID, user.DisplayName, user.Email,
+		s.Title, s.Phenotype, s.PhenotypeID, s.StudyDesign, s.SampleSize,
+		s.Biospecimen, s.MS2Supported, s.Chromatography, s.MassSpectrometry,
+		s.Summary,
+		s.DOI, s.SourceLink, s.ContactName, s.ContactEmail, s.Notes,
+		strings.Join(fileNames, ", "),
+	)
+	msg := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nReply-To: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"UTF-8\"\r\n\r\n%s",
+		c.From, contactRecipient, s.ContactEmail, subject, body,
+	)
+
+	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
+	addr := c.Host + ":" + c.Port
+	return smtp.SendMail(addr, auth, c.From, []string{contactRecipient}, []byte(msg))
 }
 
 func (c EmailConfig) sendPasswordResetEmail(toEmail, token string) error {

@@ -274,7 +274,7 @@ const tools = [
         body: 'Choose the ID type that matches the identifiers you pasted. The enrichment service maps your input to PhenoMAP metabolites using the selected field before it calculates overlap with modules.',
         visual: 'Screenshot placeholder: ID type selector',
         points: [
-          'Choose Lab ID for IDs such as PMAP_METAB_000901.',
+          'Choose Lab ID for IDs such as PME002024.',
           'Choose HMDB for IDs such as HMDB0000122.',
           'Choose KEGG for IDs such as C00219.',
           'Choose InChI only when your input values are InChI strings.',

@@ -193,6 +193,19 @@
               Next
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6" /></svg>
             </button>
+            <form class="page-jump" @submit.prevent="submitJumpPage">
+              <label for="page-jump-input">Go to page</label>
+              <input
+                id="page-jump-input"
+                v-model="jumpPageInput"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                :max="totalPages"
+                :placeholder="String(page)"
+              />
+              <button type="submit" class="page-jump-btn">Go</button>
+            </form>
           </div>
         </template>
       </template>
@@ -382,6 +395,19 @@ function goToPage(p) {
   if (p < 1 || p > totalPages.value || p === page.value) return
   page.value = p
   runSearch({ resetPage: false })
+}
+
+// "Go to page" box next to Prev/Next -- lets a user jump straight to e.g.
+// page 40 of 200 instead of clicking Next 39 times. Clamps silently to the
+// valid range rather than showing a validation error, same spirit as
+// goToPage's own out-of-range guard above.
+const jumpPageInput = ref('')
+function submitJumpPage() {
+  const parsed = parseInt(jumpPageInput.value, 10)
+  jumpPageInput.value = ''
+  if (!Number.isFinite(parsed)) return
+  const clamped = Math.min(totalPages.value, Math.max(1, parsed))
+  goToPage(clamped)
 }
 
 onMounted(() => {
@@ -835,6 +861,70 @@ onUnmounted(() => {
   color: #0f7c96;
   font-weight: 700;
   font-size: 13px;
+}
+.page-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding-left: 18px;
+  border-left: 1px solid #dfe3f0;
+}
+.page-jump label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #536172;
+  white-space: nowrap;
+}
+.page-jump input {
+  width: 60px;
+  padding: 7px 8px;
+  border-radius: 999px;
+  border: 1px solid #dfe3f0;
+  text-align: center;
+  font-size: 13.5px;
+  color: #1b1f24;
+  outline: none;
+  transition: border-color 0.15s ease;
+  /* Hide the native spinner so the box stays a clean pill like its siblings. */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.page-jump input::-webkit-outer-spin-button,
+.page-jump input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.page-jump input:focus {
+  border-color: #8fd7ea;
+}
+.page-jump-btn {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid #dfe3f0;
+  background: #fff;
+  color: #0f7c96;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.page-jump-btn:hover {
+  border-color: #8fd7ea;
+  background: #eef8fa;
+}
+
+@media (max-width: 640px) {
+  .page-jump {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+    width: 100%;
+    justify-content: center;
+  }
+  .pagination {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 860px) {

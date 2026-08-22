@@ -58,12 +58,7 @@ format_edge <- function(path, start_col, end_col, output_path) {
     check.names = FALSE
   )
 
-  # "edge_id" is excluded here too: it's synthesized above (from Lab_ID) as
-  # the canonical Neo4j edge id, but 06_add_relationship_edge_ids.R also
-  # writes its own "edge_id" column onto the tidy relationship tables --
-  # without this exclusion the two collide into a duplicate CSV header and
-  # neo4j-admin import fails.
-  extra_cols <- setdiff(colnames(df), c("Lab_ID", "edge_id", start_col, "Relationship", end_col))
+  extra_cols <- setdiff(colnames(df), c("Lab_ID", start_col, "Relationship", end_col))
   out <- cbind(out, df[, extra_cols, drop = FALSE])
   write_csv(out, output_path)
 }

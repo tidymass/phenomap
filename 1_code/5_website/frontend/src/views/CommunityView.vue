@@ -32,7 +32,14 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-if="!submissions.length">
+              <tr v-if="loadingSubmissions && !submissions.length">
+                <td colspan="7">
+                  <div class="table-empty">
+                    <strong>Loading your submissions&hellip;</strong>
+                  </div>
+                </td>
+              </tr>
+              <tr v-else-if="!submissions.length">
                 <td colspan="7">
                   <div class="table-empty">
                     <strong>{{ authState.user ? 'No submitted studies yet' : 'Sign in to track your submissions' }}</strong>
@@ -248,9 +255,11 @@
 
           <div class="submit-row">
             <p>Accepted studies receive a PhenoMAP study ID in a future release.</p>
-            <button type="submit">{{ authState.user ? 'Submit for review' : 'Sign in to submit' }}</button>
+            <button type="submit" :disabled="submitting">
+              {{ submitting ? 'Submitting…' : authState.user ? 'Submit for review' : 'Sign in to submit' }}
+            </button>
           </div>
-          <p v-if="submitMessage" class="submit-message">{{ submitMessage }}</p>
+          <p v-if="submitMessage" class="submit-message" :class="{ 'submit-message-error': submitError }">{{ submitMessage }}</p>
         </form>
       </section>
     </main>
@@ -258,26 +267,31 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
 import { authState } from '../auth.js'
+import { listCommunitySubmissions, submitCommunityStudy } from '../api.js'
 
-const form = reactive({
-  title: '',
-  phenotype: '',
-  phenotypeId: '',
-  studyDesign: '',
-  sampleSize: '',
-  biospecimen: '',
-  ms2Supported: '',
-  chromatography: '',
-  massSpectrometry: '',
-  summary: '',
-  doi: '',
-  sourceLink: '',
-  contactName: '',
-  contactEmail: '',
-  notes: '',
-})
+function emptyForm() {
+  return {
+    title: '',
+    phenotype: '',
+    phenotypeId: '',
+    studyDesign: '',
+    sampleSize: '',
+    biospecimen: '',
+    ms2Supported: '',
+    chromatography: '',
+    massSpectrometry: '',
+    summary: '',
+    doi: '',
+    sourceLink: '',
+    contactName: '',
+    contactEmail: '',
+    notes: '',
+  }
+}
+
+const form = reactive(emptyForm())
 
 const fileNames = reactive({
   featureTable: '',
@@ -285,10 +299,68 @@ const fileNames = reactive({
   metaboliteAnnotation: '',
 })
 
+// The actual File objects behind fileNames -- fileNames just holds the
+// display string shown in the upload card; this is what gets attached to
+// the FormData sent to the backend.
+const selectedFiles = reactive({
+  featureTable: null,
+  sampleMetadata: null,
+  metaboliteAnnotation: null,
+})
+
 const submitMessage = ref('')
+const submitError = ref(false)
+const submitting = ref(false)
+const loadingSubmissions = ref(false)
 const submissions = ref([])
 const selectedSubmission = ref(null)
 const activeFormatKey = ref('')
+
+// Converts one backend CommunitySubmission (snake_case -- see
+// backend/community.go) into the shape this view's template renders.
+function mapSubmission(raw) {
+  const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
+  const fileList = (raw.files || []).map((f) => f.name)
+  return {
+    id: raw.id,
+    uploadNumber: raw.upload_number,
+    title: raw.title,
+    phenotype: raw.phenotype,
+    submittedAt: raw.created_at
+      ? new Date(raw.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      : '',
+    status: capitalize(raw.status) || 'Submitted',
+    included: capitalize(raw.inclusion) || 'Pending',
+    inclusionClass: !raw.inclusion || raw.inclusion === 'pending' ? 'pending' : '',
+    phenomapLink: raw.phenomap_link || '',
+    studyDesign: raw.study_design,
+    biospecimen: raw.biospecimen,
+    files: fileList.length ? fileList.join(', ') : 'No files uploaded',
+    contactEmail: raw.contact_email,
+  }
+}
+
+async function loadSubmissions() {
+  if (!authState.user) {
+    submissions.value = []
+    return
+  }
+  loadingSubmissions.value = true
+  try {
+    const raw = await listCommunitySubmissions()
+    submissions.value = raw.map(mapSubmission)
+  } catch (e) {
+    // Not signed in yet (401 while auth is still resolving) or a transient
+    // network hiccup -- leave the table on its empty state rather than
+    // surfacing this as a submission error.
+    submissions.value = []
+  } finally {
+    loadingSubmissions.value = false
+  }
+}
+
+onMounted(loadSubmissions)
+watch(() => authState.user, loadSubmissions)
 
 const fileRequirements = [
   {
@@ -321,12 +393,14 @@ const fileRequirements = [
 ]
 
 function setFile(key, event) {
-  const file = event.target.files?.[0]
+  const file = event.target.files?.[0] || null
+  selectedFiles[key] = file
   fileNames[key] = file?.name || ''
 }
 
 function dropFile(key, event) {
-  const file = event.dataTransfer?.files?.[0]
+  const file = event.dataTransfer?.files?.[0] || null
+  selectedFiles[key] = file
   fileNames[key] = file?.name || ''
 }
 
@@ -334,35 +408,79 @@ function toggleFormat(key) {
   activeFormatKey.value = activeFormatKey.value === key ? '' : key
 }
 
-function handleSubmit() {
+function resetForm() {
+  Object.assign(form, emptyForm())
+  fileNames.featureTable = ''
+  fileNames.sampleMetadata = ''
+  fileNames.metaboliteAnnotation = ''
+  selectedFiles.featureTable = null
+  selectedFiles.sampleMetadata = null
+  selectedFiles.metaboliteAnnotation = null
+}
+
+// Backend field names (see backend/community_handlers.go) for each form
+// field and file key.
+const fieldToBackendKey = {
+  title: 'title',
+  phenotype: 'phenotype',
+  phenotypeId: 'phenotype_id',
+  studyDesign: 'study_design',
+  sampleSize: 'sample_size',
+  biospecimen: 'biospecimen',
+  ms2Supported: 'ms2_supported',
+  chromatography: 'chromatography',
+  massSpectrometry: 'mass_spectrometry',
+  summary: 'summary',
+  doi: 'doi',
+  sourceLink: 'source_link',
+  contactName: 'contact_name',
+  contactEmail: 'contact_email',
+  notes: 'notes',
+}
+
+const fileKeyToBackendKey = {
+  featureTable: 'feature_table',
+  sampleMetadata: 'sample_metadata',
+  metaboliteAnnotation: 'metabolite_annotation',
+}
+
+async function handleSubmit() {
   if (!authState.user) {
+    submitError.value = true
     submitMessage.value = 'Please sign in before submitting study data.'
     return
   }
-
-  const now = new Date()
-  const uploadNumber = submissions.value.length + 1
-  const id = `SUB-${now.getFullYear()}-${String(uploadNumber).padStart(3, '0')}`
-  const uploadedFiles = Object.values(fileNames).filter(Boolean)
-  const submission = {
-    id,
-    uploadNumber,
-    title: form.title || 'Untitled study',
-    phenotype: form.phenotype || 'Not provided',
-    submittedAt: now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-    status: 'Submitted',
-    included: 'Pending',
-    inclusionClass: 'pending',
-    phenomapLink: '',
-    studyDesign: form.studyDesign,
-    biospecimen: form.biospecimen,
-    files: uploadedFiles.length ? uploadedFiles.join(', ') : 'No files uploaded',
-    contactEmail: form.contactEmail,
+  if (!selectedFiles.featureTable || !selectedFiles.sampleMetadata) {
+    submitError.value = true
+    submitMessage.value = 'Please attach both the feature table and sample metadata files.'
+    return
   }
 
-  submissions.value = [submission, ...submissions.value]
-  selectedSubmission.value = submission
-  submitMessage.value = 'Submission added to your review queue preview. Review endpoints still need to be connected.'
+  submitting.value = true
+  submitError.value = false
+  submitMessage.value = ''
+
+  try {
+    const body = new FormData()
+    for (const [field, backendKey] of Object.entries(fieldToBackendKey)) {
+      body.append(backendKey, form[field] ?? '')
+    }
+    for (const [key, backendKey] of Object.entries(fileKeyToBackendKey)) {
+      if (selectedFiles[key]) body.append(backendKey, selectedFiles[key])
+    }
+
+    const created = await submitCommunityStudy(body)
+    const mapped = mapSubmission(created)
+    submissions.value = [mapped, ...submissions.value]
+    selectedSubmission.value = mapped
+    submitMessage.value = `Submitted as ${created.id}. You'll see a status update here once it's reviewed.`
+    resetForm()
+  } catch (e) {
+    submitError.value = true
+    submitMessage.value = e.message || 'Submission failed. Please try again.'
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -939,12 +1057,22 @@ textarea {
   white-space: nowrap;
 }
 
+.submit-row button:disabled {
+  background: #8fb9c4;
+  cursor: not-allowed;
+}
+
 .submit-message {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 7px;
   background: #eef7fa;
   color: #0f667d;
+}
+
+.submit-message-error {
+  background: #fdf0ed;
+  color: #b3562c;
 }
 
 @media (max-width: 960px) {

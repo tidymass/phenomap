@@ -24,8 +24,12 @@ build_module_study_relationship <- function(entity_dir = file.path("2_data", "ti
   out <- out[keep, , drop = FALSE]
   out <- out[!duplicated(out[, c("Module_ID", "Study_ID")]), , drop = FALSE]
   out <- out[order(out$Study_ID, out$Module_ID), , drop = FALSE]
+  # Module_ID + Study_ID are already permanent, stable Lab_IDs.
+  edge_key <- paste(out$Module_ID, out$Study_ID)
   out <- data.frame(
-    Lab_ID = sprintf("MOD_STU_%06d", seq_len(nrow(out))),
+    Lab_ID = phenomap_assign_stable_ids(
+      edge_key, "MOD_STU_", file.path(output_dir, "module_study_edge_id_registry.csv")
+    ),
     out,
     stringsAsFactors = FALSE
   )

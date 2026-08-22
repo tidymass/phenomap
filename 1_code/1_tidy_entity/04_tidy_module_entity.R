@@ -1,31 +1,17 @@
 # Generate PhenoMAP module entity table.
 #
+# Runs LAST among the 1_tidy_entity scripts (order: 01_tidy_phenotype_entity.R
+# -> 02_tidy_metabolite_entity.R -> 03_tidy_study_entity.R -> 04 (this)).
+#
 # Requires: nodes_study.csv and nodes_metabolite.csv must already exist in
-# output_dir -- run 01_tidy_study_entity.R and 03_tidy_metabolite_entity.R
+# output_dir -- run 03_tidy_study_entity.R and 02_tidy_metabolite_entity.R
 # first. (anchor/supporting/contextual_metabolite_ids reference metabolites
 # by their PhenoMAP Lab_ID, so that mapping has to exist before this runs.)
 #
 # Output:
 #   nodes_module.csv
 
-source(file.path("1_code", "1_tidy_entity", "00_entity_helpers.R"))
-
-load_res_sig <- function(case_dir) {
-  path <- file.path(case_dir, "anno_result", "res_sig.rda")
-  if (!file.exists(path)) return(NULL)
-
-  env <- new.env(parent = emptyenv())
-  object_names <- load(path, envir = env)
-  if ("res_sig" %in% object_names) return(env$res_sig)
-
-  for (nm in object_names) {
-    obj <- env[[nm]]
-    if (!is.null(obj$object_type) && identical(obj$object_type, "featuremap_result")) {
-      return(obj)
-    }
-  }
-  env[[object_names[[1]]]]
-}
+source(file.path("1_code", "00_phenomap_helpers.R"))
 
 read_study_id_map <- function(path) {
   study <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
@@ -38,12 +24,12 @@ read_study_id_map <- function(path) {
 # Maps a metabolite's INCHI_ID to its PhenoMAP Lab_ID, so the module entity
 # table can reference metabolites the same way the rest of the graph does.
 # Requires nodes_metabolite.csv to already exist -- run
-# 03_tidy_metabolite_entity.R before this script.
+# 02_tidy_metabolite_entity.R before this script.
 read_metabolite_id_map <- function(path) {
   if (!file.exists(path)) {
     stop(
       "nodes_metabolite.csv not found at ", path, ". ",
-      "Run 03_tidy_metabolite_entity.R before 04_tidy_module_entity.R."
+      "Run 02_tidy_metabolite_entity.R before 04_tidy_module_entity.R."
     )
   }
   metabolites <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
@@ -64,21 +50,8 @@ translate_metabolite_ids <- function(inchi_ids, metabolite_id_map) {
   lab_ids[!is.na(lab_ids) & nzchar(lab_ids)]
 }
 
-drop_empty <- function(x) {
-  x <- trimws(as.character(x))
-  x[!is.na(x) & nzchar(x) & !toupper(x) %in% c("NA", "NULL", "NAN", "<NA>")]
-}
-
-split_ids <- function(x) {
-  if (is.null(x) || length(x) == 0) return(character(0))
-  x <- drop_empty(x)
-  if (length(x) == 0) return(character(0))
-  ids <- drop_empty(unlist(strsplit(x, ";", fixed = TRUE), use.names = FALSE))
-  unique(ids)
-}
-
 collapse_ids <- function(x) {
-  x <- unique(drop_empty(x))
+  x <- unique(phenomap_drop_empty(x))
   if (length(x) == 0) return(NA_character_)
   paste(x, collapse = "; ")
 }
@@ -105,7 +78,7 @@ pathway_ids_for_module <- function(pathway_coverage, source, module_id, pathway_
   if (nrow(df) == 0) return(NA_character_)
   if (!"pathway_name" %in% colnames(df)) return(NA_character_)
 
-  names <- drop_empty(unlist(strsplit(phenomap_clean_scalar(pathway_names, ""), ";", fixed = TRUE), use.names = FALSE))
+  names <- phenomap_drop_empty(unlist(strsplit(phenomap_clean_scalar(pathway_names, ""), ";", fixed = TRUE), use.names = FALSE))
   if (length(names) == 0) return(NA_character_)
 
   matched_ids <- character(0)
@@ -124,7 +97,7 @@ build_module_entity_one_case <- function(case_dir, study_id_map, metabolite_id_m
     return(data.frame())
   }
 
-  res <- load_res_sig(case_dir)
+  res <- phenomap_load_res_sig(case_dir)
   module_function <- phenomap_safe_df(res$module_function)
   if (nrow(module_function) == 0) return(data.frame())
   module_table <- phenomap_safe_df(res$module_table)
@@ -142,9 +115,9 @@ build_module_entity_one_case <- function(case_dir, study_id_map, metabolite_id_m
       local_module_id <- as.character(module_function$module_id[[i]])
       local_table <- module_table[module_table$Module == local_module_id, , drop = FALSE]
 
-      all_ids <- split_ids(local_table$INCHI_ID)
-      anchor_ids <- intersect(split_ids(module_function$anchor_metabolite_ids[[i]]), all_ids)
-      top_ids <- setdiff(intersect(split_ids(module_function$top_metabolite_ids[[i]]), all_ids), anchor_ids)
+      all_ids <- phenomap_split_ids(local_table$INCHI_ID)
+      anchor_ids <- intersect(phenomap_split_ids(module_function$anchor_metabolite_ids[[i]]), all_ids)
+      top_ids <- setdiff(intersect(phenomap_split_ids(module_function$top_metabolite_ids[[i]]), all_ids), anchor_ids)
       contextual_ids <- setdiff(all_ids, union(anchor_ids, top_ids))
 
       # anchor/supporting/contextual *_ids columns store PhenoMAP Lab_IDs
@@ -186,7 +159,30 @@ build_module_entity_one_case <- function(case_dir, study_id_map, metabolite_id_m
     drop = FALSE
   ]
 
+  # The translate-to-Lab_ID block above only runs when module_table has
+  # Module/INCHI_ID columns; when a study's res_sig lacks those (empty or
+  # differently-shaped module_table), module_function's own columns
+  # (anchor/top/contextual metabolite ids and names, pathway ids, etc.) pass
+  # through unchanged from the underlying R6 tibble, where multi-value
+  # fields are stored as list-columns. write.csv()/write.table() can't
+  # serialize a list column ("unimplemented type 'list' in 'EncodeElement'"),
+  # which silently truncated nodes_module.csv to whatever had been written
+  # before the first such study was hit. Flatten defensively here so this
+  # can never reach phenomap_write_csv(), regardless of which branch ran.
+  for (col in names(module_function)) {
+    if (is.list(module_function[[col]])) {
+      module_function[[col]] <- vapply(module_function[[col]], collapse_ids, character(1))
+    }
+  }
+
+  # accession (the raw ST.../MTBLS... study_id) + the study's own local
+  # module_id together form a permanent natural key for this module -- both
+  # come straight from the upstream res_sig.rda, not from anything this
+  # script computes, so they never change across reruns. Used below to
+  # assign a stable Lab_ID; dropped before writing (not part of the desired
+  # nodes_module.csv columns).
   data.frame(
+    module_natural_key = paste0(accession, "::", module_function$module_id),
     Study_ID = rep(study_lab_id, nrow(module_function)),
     module_function,
     stringsAsFactors = FALSE,
@@ -195,20 +191,51 @@ build_module_entity_one_case <- function(case_dir, study_id_map, metabolite_id_m
 }
 
 build_module_entity <- function(
-  case_root = file.path("2_data", "raw", "workbench_20260629", "update_res_only_260705"),
-  output_dir = file.path("2_data", "tidy_entity")
+  case_root_mw,
+  case_root_ml,
+  output_dir = file.path("2_data", "tidy_entity"),
+  workers = max(1L, parallel::detectCores(logical = FALSE) - 1L)
 ) {
+  if (!nzchar(case_root_mw) || !nzchar(case_root_ml)) {
+    stop("Both --case_root_mw and --case_root_ml must be provided.")
+  }
   study_id_map <- read_study_id_map(file.path(output_dir, "nodes_study.csv"))
   metabolite_id_map <- read_metabolite_id_map(file.path(output_dir, "nodes_metabolite.csv"))
-  case_dirs <- list.dirs(case_root, recursive = FALSE, full.names = TRUE)
-  case_dirs <- case_dirs[file.exists(file.path(case_dirs, "anno_result", "res_sig.rda"))]
-
-  rows <- lapply(
-    case_dirs,
-    build_module_entity_one_case,
-    study_id_map = study_id_map,
-    metabolite_id_map = metabolite_id_map
+  # Any study not already in nodes_study.csv (e.g. excluded upstream by the
+  # case-control filter, or missing a phenotype) has no study_lab_id to join
+  # against and is skipped in build_module_entity_one_case() below, so this
+  # doesn't need to re-apply the case-control filter itself.
+  case_dirs <- c(
+    phenomap_case_dirs(case_root_mw, require_res_sig = TRUE),
+    phenomap_case_dirs(case_root_ml, require_res_sig = TRUE)
   )
+
+  # Each case_dir's res_sig.rda load + per-module bookkeeping is independent
+  # of every other case_dir (no shared state, no external calls to
+  # rate-limit), so this is a plain CPU/IO-bound embarrassingly-parallel
+  # loop -- fork-based parallelism (parallel::mclapply) only works on
+  # Unix-like systems; fall back to a single-worker serial lapply elsewhere
+  # (e.g. Windows), same convention as 2_tidy_relationship/05.
+  use_workers <- if (.Platform$OS.type == "unix") max(1L, workers) else 1L
+  rows <- if (use_workers > 1L) {
+    parallel::mclapply(
+      case_dirs,
+      build_module_entity_one_case,
+      study_id_map = study_id_map,
+      metabolite_id_map = metabolite_id_map,
+      mc.cores = use_workers
+    )
+  } else {
+    lapply(
+      case_dirs,
+      build_module_entity_one_case,
+      study_id_map = study_id_map,
+      metabolite_id_map = metabolite_id_map
+    )
+  }
+  # mclapply returns a try-error condition object (not a data.frame) for any
+  # worker that crashed instead of propagating the error -- the is.data.frame
+  # filter below already drops those silently, same as an empty/skipped case.
   rows <- rows[vapply(rows, function(x) is.data.frame(x) && nrow(x) > 0, logical(1))]
 
   if (length(rows) == 0) {
@@ -218,8 +245,12 @@ build_module_entity <- function(
     module_order <- suppressWarnings(as.integer(sub("^M", "", as.character(out$module_id))))
     module_order[is.na(module_order)] <- seq_along(module_order)[is.na(module_order)]
     out <- out[order(out$Study_ID, module_order), , drop = FALSE]
+    lab_id <- phenomap_assign_stable_ids(
+      out$module_natural_key, "PMO", file.path(output_dir, "module_id_registry.csv")
+    )
+    out$module_natural_key <- NULL
     out <- data.frame(
-      Lab_ID = sprintf("PMAP_MOUDLE_%06d", seq_len(nrow(out))),
+      Lab_ID = lab_id,
       out,
       stringsAsFactors = FALSE,
       check.names = FALSE
@@ -232,11 +263,10 @@ build_module_entity <- function(
 
 if (identical(environment(), globalenv()) && !interactive()) {
   args <- phenomap_parse_args()
-  if (identical(args$case_root, file.path("..", "featuremap_case", "2_data", "case_metabolights"))) {
-    args$case_root <- file.path("2_data", "raw", "workbench_20260629", "update_res_only_260705")
-  }
   build_module_entity(
-    case_root = args$case_root,
-    output_dir = args$output_dir
+    case_root_mw = args$case_root_mw,
+    case_root_ml = args$case_root_ml,
+    output_dir = args$output_dir,
+    workers = args$workers
   )
 }

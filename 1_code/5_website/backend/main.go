@@ -60,6 +60,9 @@ func main() {
 	mux.HandleFunc("POST /api/auth/forgot-password", handleForgotPassword(authDB, emailCfg))
 	mux.HandleFunc("POST /api/auth/reset-password", handleResetPassword(authDB))
 	mux.HandleFunc("GET /api/node/{label}/{id}", handleNodeDetail(db))
+	mux.HandleFunc("POST /api/community/submissions", handleCreateSubmission(authDB, emailCfg))
+	mux.HandleFunc("GET /api/community/submissions", handleListSubmissions(authDB))
+	mux.HandleFunc("GET /api/community/submissions/{id}/files/{key}", handleDownloadSubmissionFile(authDB))
 
 	addr := ":" + getenv("PORT", "8080")
 	srv := &http.Server{
