@@ -96,15 +96,49 @@ dbms.security.procedures.unrestricted=apoc.*
 dbms.security.procedures.allowlist=apoc.*
 CONFEOF
 
+# ---------------------------------------------------------------- libsodium
+# R 的 plumber 硬依赖 sodium 包，它要在编译时链接 libsodium 的头文件。很多
+# 服务器上只有运行时的 libsodium.so 而没有开发头文件，装 libsodium-dev 又要
+# root。所以优先用系统的，没有就从 conda-forge 拉一份到 opt/ 下 —— 纯用户态，
+# 不需要 sudo，也不污染系统。
+SODIUM_PREFIX="$OPT_DIR/libsodium"
+if [ -f "$SODIUM_PREFIX/include/sodium.h" ]; then
+  say "libsodium 已就位: $SODIUM_PREFIX"
+elif [ -f /usr/include/sodium.h ]; then
+  SODIUM_PREFIX=/usr
+  say "系统自带 libsodium 开发文件，直接用"
+else
+  MAMBA="$(command -v micromamba || command -v mamba || command -v conda || true)"
+  [ -n "$MAMBA" ] || die "既没有 libsodium 开发文件，也没有 micromamba/conda 可以装它"
+  # micromamba 没做过 shell init 时会没有 root prefix（包缓存位置），显式给一个，
+  # 免得它去写用户家目录或直接报错。
+  export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-$OPT_DIR/mamba}"
+  say "从 conda-forge 安装 libsodium 到 $SODIUM_PREFIX（不需要 sudo）"
+  "$MAMBA" create -y -q -p "$SODIUM_PREFIX" -c conda-forge libsodium >/dev/null \
+    || die "libsodium 安装失败"
+  [ -f "$SODIUM_PREFIX/include/sodium.h" ] || die "装完了却找不到 sodium.h，看 $SODIUM_PREFIX"
+fi
+
 # ---------------------------------------------------------------- R plumber
 mkdir -p "$R_LIB_DIR"
-if R_LIBS_USER="$R_LIB_DIR" Rscript -e 'quit(status = !requireNamespace("plumber", quietly=TRUE))' 2>/dev/null; then
+# 不靠 R_LIBS_USER：这台机器的 Renviron.site/.Renviron 会覆盖它（实测包被装到
+# 了 /scratch 下而不是这里）。直接在 R 里 .libPaths() 指定，包全部装进部署目录
+# 自己的库，跟系统 R 和别人的用户库互不影响，/scratch 被清也不受牵连。
+r_run() {
+  LD_LIBRARY_PATH="$SODIUM_PREFIX/lib:${LD_LIBRARY_PATH:-}" \
+    Rscript -e ".libPaths('$R_LIB_DIR')" -e "$1"
+}
+if r_run 'quit(status = !requireNamespace("plumber", quietly=TRUE))' 2>/dev/null; then
   say "R plumber 已就位"
 else
-  say "安装 R 包 plumber 到 $R_LIB_DIR（装在用户库，不动系统 R）"
-  R_LIBS_USER="$R_LIB_DIR" Rscript -e \
-    'install.packages("plumber", lib=Sys.getenv("R_LIBS_USER"), repos="https://cloud.r-project.org")' \
-    || die "plumber 安装失败，看上面的编译报错"
+  say "安装 R 包 sodium + plumber 到 $R_LIB_DIR（要编译，几分钟，输出较多）"
+  r_run "install.packages('sodium', lib='$R_LIB_DIR', repos='https://cloud.r-project.org', configure.vars='INCLUDE_DIR=$SODIUM_PREFIX/include LIB_DIR=$SODIUM_PREFIX/lib')"
+  r_run "install.packages('plumber', lib='$R_LIB_DIR', repos='https://cloud.r-project.org')"
+  # install.packages 装失败时退出码仍然是 0，只打一条 warning —— 所以必须显式
+  # 复查一次，否则脚本会带着一个装了一半的 R 库继续往下跑。
+  r_run 'quit(status = !requireNamespace("plumber", quietly=TRUE))' \
+    || die "plumber 还是没装上，看上面的编译报错"
+  say "R plumber 安装完成"
 fi
 
 # ---------------------------------------------------------------- Python

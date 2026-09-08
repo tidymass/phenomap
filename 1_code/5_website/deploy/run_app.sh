@@ -70,9 +70,12 @@ do_start() {
   [ -f "$DIST_DIR/index.html" ]  || die "前端还没构建，先跑 ./build.sh"
   say "启动"
   start_neo4j
+  # .libPaths 和 LD_LIBRARY_PATH 要跟 bootstrap.sh 里装包时用的一致：R 包装在
+  # 部署目录自己的库里，sodium 链接的是 opt/libsodium 下那份运行时库。
   start_bg enrich "$WEB_DIR/enrichment-service" \
-    env R_LIBS_USER="$R_LIB_DIR" Rscript -e \
-    "pr <- plumber::plumb('$WEB_DIR/enrichment-service/plumber.R'); pr\$run(host='127.0.0.1', port=$ENRICHMENT_PORT)"
+    env LD_LIBRARY_PATH="$OPT_DIR/libsodium/lib:${LD_LIBRARY_PATH:-}" \
+    Rscript -e ".libPaths('$R_LIB_DIR')" \
+            -e "pr <- plumber::plumb('$WEB_DIR/enrichment-service/plumber.R'); pr\$run(host='127.0.0.1', port=$ENRICHMENT_PORT)"
   if [ "${ENABLE_CHAT:-yes}" = "yes" ]; then
     start_bg chat "$WEB_DIR/chat-service" \
       "$VENV_DIR/bin/uvicorn" main:app --host 127.0.0.1 --port "$CHAT_PORT"
