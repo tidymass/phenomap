@@ -1,0 +1,277 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1100" viewBox="0 0 1900 1100" role="img" aria-labelledby="title desc">
+  <title id="title">Figure 5a draft based on user layout</title>
+  <desc id="desc">A white-background PhenoMAP construction figure with a top public-study-to-module workflow and a phenotype normalization inset showing type-specific ontology routing.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .ink { fill: #202832; }
+      .muted { fill: #5d6875; }
+      .hair { stroke: #b7bec8; stroke-width: 2; fill: none; }
+      .line { stroke: #222832; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .softline { stroke: #8f98a5; stroke-width: 2.4; fill: none; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-soft); }
+      .dashed { stroke: #bcc3cc; stroke-width: 2.2; stroke-dasharray: 8 9; fill: none; }
+      .panel-title { font-family: Arial, Helvetica, sans-serif; font-size: 30px; font-weight: 700; fill: #101418; }
+      .section-title { font-family: Arial, Helvetica, sans-serif; font-size: 25px; font-weight: 700; fill: #101418; }
+      .label { font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 700; fill: #202832; }
+      .body { font-family: Arial, Helvetica, sans-serif; font-size: 18px; fill: #202832; }
+      .small { font-family: Arial, Helvetica, sans-serif; font-size: 15px; fill: #4e5a66; }
+      .tiny { font-family: Arial, Helvetica, sans-serif; font-size: 13px; fill: #5d6875; }
+      .chip { stroke-width: 1.7; rx: 8; }
+      .chip-text { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+      .repo-red { fill: #fce8e8; stroke: #dc2f3a; }
+      .repo-blue { fill: #e6f1fb; stroke: #2878b8; }
+      .green { fill: #eaf6ee; stroke: #44a65a; }
+      .gold { fill: #fff5df; stroke: #cfa64f; }
+      .purple { fill: #eee8f7; stroke: #7253a3; }
+      .teal { fill: #e5f5f2; stroke: #2b9b8e; }
+      .orange { fill: #fdebe2; stroke: #df6f43; }
+      .blue { fill: #e6f0fb; stroke: #3278b7; }
+      .gray { fill: #f7f8fa; stroke: #c8ced6; }
+      .white-card { fill: #ffffff; stroke: #d4dae2; stroke-width: 2; rx: 12; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#222832"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#8f98a5"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1900" height="1100"/>
+  <text class="panel-title" x="12" y="28">a</text>
+
+  <!-- Top construction workflow, preserved from the user's draft but redrawn with lighter academic colors. -->
+  <g id="top-workflow" transform="translate(52 18)">
+    <rect x="0" y="0" width="285" height="154" rx="15" fill="#ffffff" stroke="#1f2933" stroke-width="2.4"/>
+    <g transform="translate(22 25)">
+      <ellipse cx="18" cy="0" rx="18" ry="8" fill="#de2f39"/>
+      <rect x="0" y="0" width="36" height="42" fill="#de2f39"/>
+      <ellipse cx="18" cy="42" rx="18" ry="8" fill="#de2f39"/>
+      <path d="M0 13 C9 20 27 20 36 13 M0 27 C9 34 27 34 36 27" stroke="#ffffff" stroke-width="3" fill="none"/>
+      <text class="label" x="74" y="16" fill="#de2f39">MetaboLights</text>
+      <ellipse cx="18" cy="70" rx="18" ry="8" fill="#2878b8"/>
+      <rect x="0" y="70" width="36" height="42" fill="#2878b8"/>
+      <ellipse cx="18" cy="112" rx="18" ry="8" fill="#2878b8"/>
+      <path d="M0 83 C9 90 27 90 36 83 M0 97 C9 104 27 104 36 97" stroke="#ffffff" stroke-width="3" fill="none"/>
+      <text class="label" x="74" y="88" fill="#2878b8">Metabolomics</text>
+      <text class="label" x="74" y="119" fill="#2878b8">Workbench</text>
+    </g>
+    <text class="section-title" x="143" y="193" text-anchor="middle">Public repositories</text>
+
+    <path class="line" d="M292 78 L363 78"/>
+    <g transform="translate(382 30)">
+      <path d="M7 0 L82 0 L54 38 L54 82 L35 93 L35 38 Z" fill="#dfeaf7" stroke="#6a7d91" stroke-width="2"/>
+      <text class="body" x="45" y="104" text-anchor="middle">study</text>
+      <text class="body" x="45" y="127" text-anchor="middle">screening</text>
+    </g>
+    <path class="line" d="M455 78 L525 78"/>
+
+    <g transform="translate(542 23)">
+      <rect x="0" y="0" width="92" height="110" rx="5" fill="#eaf6ee" stroke="#44a65a" stroke-width="3"/>
+      <line x1="20" y1="25" x2="72" y2="25" stroke="#44a65a" stroke-width="7"/>
+      <line x1="20" y1="50" x2="72" y2="50" stroke="#44a65a" stroke-width="7" opacity="0.8"/>
+      <line x1="20" y1="75" x2="60" y2="75" stroke="#44a65a" stroke-width="7" opacity="0.7"/>
+      <circle cx="83" cy="102" r="23" fill="#61bd77"/>
+      <path d="M72 100 L81 109 L98 87" stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(660 20)">
+      <text class="body" x="0" y="15">• Human studies</text>
+      <text class="body" x="0" y="39">• Required MS1 raw data</text>
+      <text class="body" x="0" y="63">• Metadata available</text>
+      <text class="body" x="0" y="87">• Analyzable phenotype design</text>
+    </g>
+    <text class="section-title" x="650" y="193" text-anchor="middle">Curated studies</text>
+
+    <path class="line" d="M842 78 L1033 78"/>
+    <g transform="translate(962 -10)">
+      <polygon points="48,0 93,26 93,78 48,104 3,78 3,26" fill="#ffffff" stroke="#c91f46" stroke-width="2"/>
+      <rect x="23" y="27" width="50" height="28" fill="#ffffff" stroke="#c91f46" stroke-width="2"/>
+      <polyline points="29,50 35,41 41,45 47,34 53,43 60,30 67,48" stroke="#9fd5e6" stroke-width="2" fill="none"/>
+      <text x="48" y="90" font-family="Arial, Helvetica, sans-serif" font-size="16" font-style="italic" fill="#c91f46" text-anchor="middle">tidyMass</text>
+    </g>
+    <text class="body" x="1008" y="104" text-anchor="middle">Data</text>
+    <text class="body" x="1008" y="128" text-anchor="middle">processing</text>
+
+    <g transform="translate(1124 14)">
+      <path d="M0 0 H74 L114 38 V118 H0 Z" fill="#fff8e9" stroke="#cba34e" stroke-width="3"/>
+      <path d="M74 0 V38 H114" fill="none" stroke="#cba34e" stroke-width="3"/>
+      <path d="M20 24 L42 12 L64 24 V48 L42 60 L20 48 Z" fill="none" stroke="#cba34e" stroke-width="2.3"/>
+      <text class="small" x="66" y="76" text-anchor="middle">Feature 1</text>
+      <text class="small" x="66" y="96" text-anchor="middle">Feature 2</text>
+      <text class="small" x="66" y="116" text-anchor="middle">Feature 3</text>
+      <path d="M-22 10 H52 L92 48 V128 H-22 Z" fill="none" stroke="#cba34e" stroke-width="2" opacity="0.85"/>
+      <path d="M-44 20 H30 L70 58 V138 H-44 Z" fill="none" stroke="#cba34e" stroke-width="2" opacity="0.65"/>
+    </g>
+    <text class="section-title" x="1192" y="193" text-anchor="middle">Feature tables</text>
+
+    <path class="line" d="M1275 78 L1450 78"/>
+    <text class="body" x="1358" y="103" text-anchor="middle">FeatureMAP</text>
+    <text class="body" x="1358" y="127" text-anchor="middle">analysis</text>
+
+    <g transform="translate(1475 20)">
+      <path d="M20 20 C40 -8 95 0 110 32 C126 64 92 94 52 84 C16 75 -4 49 20 20 Z" fill="#fff1d7"/>
+      <circle cx="42" cy="30" r="7" fill="#eaa53f"/><circle cx="75" cy="17" r="7" fill="#eaa53f"/><circle cx="95" cy="45" r="7" fill="#eaa53f"/><circle cx="61" cy="64" r="7" fill="#eaa53f"/>
+      <path d="M42 30 L75 17 L95 45 L61 64 L42 30 L95 45" stroke="#d89932" stroke-width="2" fill="none"/>
+    </g>
+    <g transform="translate(1590 22)">
+      <path d="M13 14 C44 -9 96 -1 112 27 C129 55 100 82 58 75 C20 68 -10 40 13 14 Z" fill="#e4f0fb"/>
+      <circle cx="38" cy="23" r="7" fill="#3986bd"/><circle cx="68" cy="20" r="7" fill="#3986bd"/><circle cx="94" cy="42" r="7" fill="#3986bd"/><circle cx="54" cy="60" r="7" fill="#3986bd"/>
+      <path d="M38 23 L68 20 L94 42 L54 60 L38 23 L94 42" stroke="#3278b7" stroke-width="2" fill="none"/>
+    </g>
+    <g transform="translate(1545 95)">
+      <path d="M9 17 C32 -6 86 0 96 35 C104 68 62 82 29 63 C4 49 -7 30 9 17 Z" fill="#f0e8f8"/>
+      <circle cx="36" cy="26" r="6" fill="#8159a7"/><circle cx="62" cy="17" r="6" fill="#8159a7"/><circle cx="82" cy="45" r="6" fill="#8159a7"/><circle cx="51" cy="59" r="6" fill="#8159a7"/>
+      <path d="M36 26 L62 17 L82 45 L51 59 L36 26 L82 45" stroke="#7753a3" stroke-width="2" fill="none"/>
+    </g>
+    <g transform="translate(1743 20)">
+      <path d="M0 10 H65 L92 37 V130 H0 Z" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+      <path d="M65 10 V37 H92" fill="none" stroke="#111111" stroke-width="3"/>
+      <line x1="20" y1="43" x2="65" y2="43" stroke="#111111" stroke-width="3"/>
+      <line x1="20" y1="65" x2="52" y2="65" stroke="#111111" stroke-width="3"/>
+      <rect x="20" y="92" width="10" height="25" fill="none" stroke="#111111" stroke-width="3"/>
+      <rect x="37" y="77" width="10" height="40" fill="none" stroke="#111111" stroke-width="3"/>
+      <rect x="54" y="102" width="10" height="15" fill="none" stroke="#111111" stroke-width="3"/>
+      <circle cx="80" cy="70" r="33" fill="#ffffff" stroke="#111111" stroke-width="3"/>
+      <path d="M80 70 L80 37 A33 33 0 0 1 111 83 Z" fill="#f5f5f5" stroke="#111111" stroke-width="3"/>
+      <path d="M-10 20 H55 L82 47 V140 H-10 Z" fill="none" stroke="#111111" stroke-width="2" opacity="0.75"/>
+      <path d="M-20 30 H45 L72 57 V150 H-20 Z" fill="none" stroke="#111111" stroke-width="2" opacity="0.55"/>
+    </g>
+    <text class="section-title" x="1655" y="193" text-anchor="middle">Dysregulated modules and</text>
+    <text class="section-title" x="1655" y="225" text-anchor="middle">functional reports</text>
+
+    <path d="M612 215 V238 H220 V258" stroke="#1f2933" stroke-width="2.7" fill="none" marker-end="url(#arrow)"/>
+    <circle cx="612" cy="215" r="6" fill="#1f2933"/>
+  </g>
+
+  <!-- Panel b: phenotype normalization and ontology routing, drawn into the open lower area of the user's draft. -->
+  <text class="panel-title" x="520" y="292">b</text>
+  <rect x="50" y="280" width="690" height="770" rx="28" class="dashed"/>
+  <rect x="105" y="302" width="420" height="42" rx="0" fill="#7355a3"/>
+  <text x="315" y="331" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#ffffff" text-anchor="middle">Phenotype normalization</text>
+
+  <g id="phenotype-routing" transform="translate(82 372)">
+    <!-- Study description and extraction -->
+    <g transform="translate(0 0)">
+      <rect x="0" y="0" width="112" height="116" rx="9" fill="#ffffff" stroke="#202832" stroke-width="3"/>
+      <path d="M80 0 L112 32 H80 Z" fill="#f1f3f6" stroke="#202832" stroke-width="2"/>
+      <line x1="25" y1="38" x2="67" y2="38" stroke="#202832" stroke-width="3"/>
+      <line x1="25" y1="58" x2="90" y2="58" stroke="#202832" stroke-width="3"/>
+      <line x1="25" y1="78" x2="88" y2="78" stroke="#202832" stroke-width="3"/>
+      <line x1="25" y1="98" x2="72" y2="98" stroke="#202832" stroke-width="3"/>
+      <text class="body" x="56" y="149" text-anchor="middle">Study</text>
+      <text class="body" x="56" y="172" text-anchor="middle">description</text>
+    </g>
+    <path class="line" d="M130 56 L230 56"/>
+    <text class="small" x="180" y="80" text-anchor="middle">LLM reasoning</text>
+    <g transform="translate(250 3)">
+      <circle cx="50" cy="50" r="46" fill="#ffffff" stroke="#202832" stroke-width="3"/>
+      <path d="M31 52 C18 42 19 24 36 19 C43 6 61 8 68 20 C84 22 91 39 79 51 C86 64 76 80 60 77 C50 90 30 83 31 67 C16 65 13 49 31 52 Z" fill="none" stroke="#202832" stroke-width="3"/>
+      <text class="label" x="50" y="129" text-anchor="middle">Phenotype type</text>
+      <text class="small" x="50" y="151" text-anchor="middle">classification</text>
+    </g>
+
+    <!-- Phenotype type chips -->
+    <g transform="translate(0 220)">
+      <text class="label" x="0" y="-20">Phenotype categories</text>
+      <g transform="translate(0 0)">
+        <rect class="chip purple" x="0" y="0" width="115" height="30"/><text class="chip-text" x="57.5" y="16">disease</text>
+        <rect class="chip purple" x="125" y="0" width="115" height="30"/><text class="chip-text" x="182.5" y="16">symptom</text>
+        <rect class="chip purple" x="250" y="0" width="130" height="30"/><text class="chip-text" x="315" y="16">intervention</text>
+        <rect class="chip purple" x="390" y="0" width="120" height="30"/><text class="chip-text" x="450" y="16">chemical</text>
+        <rect class="chip purple" x="0" y="42" width="115" height="30"/><text class="chip-text" x="57.5" y="58">exposure</text>
+        <rect class="chip purple" x="125" y="42" width="115" height="30"/><text class="chip-text" x="182.5" y="58">trait</text>
+        <rect class="chip purple" x="250" y="42" width="180" height="30"/><text class="chip-text" x="340" y="58">genetic perturbation</text>
+        <rect class="chip purple" x="0" y="84" width="160" height="30"/><text class="chip-text" x="80" y="100">cell type / line</text>
+        <rect class="chip purple" x="170" y="84" width="170" height="30"/><text class="chip-text" x="255" y="100">biological process</text>
+        <rect class="chip gray" x="350" y="84" width="145" height="30"/><text class="chip-text" x="422.5" y="100">not applicable</text>
+        <rect class="chip gray" x="505" y="84" width="95" height="30"/><text class="chip-text" x="552.5" y="100">unclear</text>
+      </g>
+    </g>
+
+    <!-- Routing map -->
+    <g transform="translate(0 390)">
+      <text class="label" x="0" y="-20">Type-specific ontology routing</text>
+      <rect class="white-card" x="0" y="0" width="610" height="255"/>
+      <g transform="translate(22 25)">
+        <text class="small" x="0" y="0" font-weight="700">Phenotype type</text>
+        <text class="small" x="255" y="0" font-weight="700">Ontology source</text>
+        <line x1="0" y1="14" x2="560" y2="14" stroke="#d6dce3" stroke-width="2"/>
+
+        <text class="small" x="0" y="43">disease</text>
+        <text class="small" x="255" y="43">MONDO / EFO / MeSH / HPO</text>
+        <text class="small" x="0" y="72">symptom</text>
+        <text class="small" x="255" y="72">HPO</text>
+        <text class="small" x="0" y="101">intervention</text>
+        <text class="small" x="255" y="101">NCIT</text>
+        <text class="small" x="0" y="130">chemical</text>
+        <text class="small" x="255" y="130">ChEBI</text>
+        <text class="small" x="0" y="159">exposure</text>
+        <text class="small" x="255" y="159">EFO / MeSH</text>
+        <text class="small" x="0" y="188">trait</text>
+        <text class="small" x="255" y="188">EFO / HPO</text>
+        <text class="small" x="0" y="217">cell type / line; biological process</text>
+        <text class="small" x="255" y="217">CL / EFO; GO</text>
+
+        <rect x="415" y="31" width="125" height="25" rx="12" fill="#e5f5f2" stroke="#2b9b8e"/>
+        <text class="tiny" x="477.5" y="48" text-anchor="middle" font-weight="700">MONDO canonical</text>
+        <rect x="415" y="86" width="125" height="25" rx="12" fill="#fff5df" stroke="#cfa64f"/>
+        <text class="tiny" x="477.5" y="103" text-anchor="middle" font-weight="700">OLS retrieval</text>
+        <rect x="415" y="171" width="125" height="25" rx="12" fill="#f7f8fa" stroke="#c8ced6"/>
+        <text class="tiny" x="477.5" y="188" text-anchor="middle" font-weight="700">manual review</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Right side of panel b: the resolved flow from routing to phenotype nodes. -->
+  <g transform="translate(800 310)">
+    <rect x="0" y="0" width="1035" height="735" rx="26" fill="#fbfcfd" stroke="#e1e5eb" stroke-width="2"/>
+    <text class="section-title" x="38" y="48">Ontology candidate selection and graph-ready phenotype records</text>
+
+    <g transform="translate(45 93)">
+      <rect class="white-card" x="0" y="0" width="210" height="115"/>
+      <text class="label" x="105" y="35" text-anchor="middle">OLS candidates</text>
+      <text class="small" x="105" y="65" text-anchor="middle">ranked labels</text>
+      <text class="small" x="105" y="88" text-anchor="middle">IDs, synonyms, definitions</text>
+      <path class="softline" d="M220 58 L315 58"/>
+      <rect class="white-card" x="330" y="0" width="210" height="115"/>
+      <text class="label" x="435" y="35" text-anchor="middle">Best match</text>
+      <text class="small" x="435" y="65" text-anchor="middle">single selected term</text>
+      <text class="small" x="435" y="88" text-anchor="middle">or manual review</text>
+      <path class="softline" d="M550 58 L650 58"/>
+      <rect x="665" y="0" width="255" height="115" rx="13" fill="#f0eaf7" stroke="#7253a3" stroke-width="2"/>
+      <text class="label" x="792.5" y="33" text-anchor="middle" fill="#7253a3">Normalized phenotype</text>
+      <text class="small" x="792.5" y="62" text-anchor="middle">PPH ID · label · type</text>
+      <text class="small" x="792.5" y="86" text-anchor="middle">ontology ID · definition</text>
+    </g>
+
+    <g transform="translate(58 265)">
+      <text class="label" x="0" y="-20">Special routes</text>
+      <rect x="0" y="0" width="430" height="104" rx="13" fill="#eef5fb" stroke="#3278b7" stroke-width="2"/>
+      <text class="body" x="22" y="35" font-weight="700">Genetic perturbation</text>
+      <text class="small" x="22" y="65">bypasses OLS and resolves the perturbed gene</text>
+      <text class="small" x="22" y="88">against Homo sapiens NCBI Gene</text>
+      <rect x="465" y="0" width="430" height="104" rx="13" fill="#f7f8fa" stroke="#c8ced6" stroke-width="2"/>
+      <text class="body" x="487" y="35" font-weight="700">Not applicable / unclear</text>
+      <text class="small" x="487" y="65">excluded from the Phenotype layer or</text>
+      <text class="small" x="487" y="88">sent to manual review when unresolved</text>
+    </g>
+
+    <g transform="translate(70 455)">
+      <text class="label" x="0" y="-20">Graph assembly output</text>
+      <circle cx="130" cy="88" r="55" fill="#f0eaf7" stroke="#7253a3" stroke-width="3"/>
+      <text class="label" x="130" y="82" text-anchor="middle" fill="#7253a3">Phenotype</text>
+      <text class="small" x="130" y="107" text-anchor="middle">PPH</text>
+      <circle cx="405" cy="88" r="48" fill="#e6f0fb" stroke="#3278b7" stroke-width="3"/>
+      <text class="label" x="405" y="82" text-anchor="middle" fill="#3278b7">Study</text>
+      <text class="small" x="405" y="107" text-anchor="middle">PST</text>
+      <path class="line" d="M357 88 L190 88"/>
+      <text class="small" x="273" y="74" text-anchor="middle">investigated</text>
+
+      <circle cx="680" cy="88" r="48" fill="#fdebe2" stroke="#df6f43" stroke-width="3"/>
+      <text class="label" x="680" y="82" text-anchor="middle" fill="#df6f43">Module</text>
+      <text class="small" x="680" y="107" text-anchor="middle">PMO</text>
+      <path class="softline" d="M631 88 C562 138 482 138 433 104"/>
+      <text class="small" x="544" y="160" text-anchor="middle">phenotype context retained via study provenance</text>
+    </g>
+  </g>
+</svg>

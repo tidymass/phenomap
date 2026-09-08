@@ -1,4 +1,8 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+// An empty VITE_API_BASE_URL (set in .env.production) means "same origin":
+// the deployed build talks to /api/... on whatever host it was served from,
+// so the site works over any hostname or IP without a rebuild. Note ?? not
+// || -- an empty string is a deliberate value here, not a missing one.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
 
 async function getJSON(path, opts = {}) {
   const res = await fetch(`${BASE_URL}${path}`, { credentials: 'include', signal: opts.signal })

@@ -64,6 +64,12 @@ func main() {
 	mux.HandleFunc("GET /api/community/submissions", handleListSubmissions(authDB))
 	mux.HandleFunc("GET /api/community/submissions/{id}/files/{key}", handleDownloadSubmissionFile(authDB))
 
+	// Deployed as a single service, the backend also serves the built
+	// frontend; in local dev FRONTEND_DIST_DIR is unset and this is a no-op.
+	if spa := newSPAHandler(getenv("FRONTEND_DIST_DIR", "")); spa != nil {
+		mux.Handle("/", spa)
+	}
+
 	addr := ":" + getenv("PORT", "8080")
 	srv := &http.Server{
 		Addr:        addr,
