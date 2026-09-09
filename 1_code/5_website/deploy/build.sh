@@ -13,6 +13,50 @@ say "构建前端 (vite build)"
 (cd "$WEB_DIR/frontend" && npm run build)
 [ -f "$DIST_DIR/index.html" ] || die "前端构建没产出 dist/index.html"
 
+say "预压缩前端静态资源 (br/gzip)"
+(
+  cd "$DIST_DIR"
+  node -e '
+const fs = require("fs")
+const path = require("path")
+const zlib = require("zlib")
+
+const compressible = new Set([".css", ".html", ".js", ".json", ".map", ".svg", ".txt", ".wasm", ".xml"])
+let count = 0
+
+function walk(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      walk(fullPath)
+      continue
+    }
+    if (!entry.isFile()) continue
+    if (entry.name.endsWith(".br") || entry.name.endsWith(".gz")) continue
+    if (!compressible.has(path.extname(entry.name).toLowerCase())) continue
+
+    const input = fs.readFileSync(fullPath)
+    if (input.length < 1024) continue
+
+    fs.writeFileSync(
+      `${fullPath}.br`,
+      zlib.brotliCompressSync(input, {
+        params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
+      }),
+    )
+    fs.writeFileSync(
+      `${fullPath}.gz`,
+      zlib.gzipSync(input, { level: zlib.constants.Z_BEST_COMPRESSION }),
+    )
+    count += 1
+  }
+}
+
+walk(".")
+console.log(`  compressed ${count} frontend files`)
+'
+)
+
 say "构建 Go 后端"
 # 产物放在部署根目录的 bin/ 下，不覆盖仓库里那个 backend/phenomap-web，
 # 免得下次 git pull 冲突。

@@ -2,10 +2,12 @@ package main
 
 import (
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -33,7 +35,6 @@ func newSPAHandler(dir string) http.Handler {
 		log.Printf("warning: no index.html under FRONTEND_DIST_DIR %q -- not serving a frontend", abs)
 		return nil
 	}
-	files := http.FileServer(http.Dir(abs))
 	log.Printf("serving frontend from %s", abs)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,15 +52,96 @@ func newSPAHandler(dir string) http.Handler {
 		if upath != "/" {
 			onDisk := filepath.Join(abs, filepath.FromSlash(upath[1:]))
 			if st, err := os.Stat(onDisk); err == nil && !st.IsDir() {
-				files.ServeHTTP(w, r)
+				serveStaticFile(w, r, onDisk, upath)
 				return
 			}
 		}
 		// index.html names hashed asset files, so it must never be cached --
 		// otherwise a browser keeps loading the previous build's JS after a
-		// redeploy. The assets themselves are content-hashed and cached by
-		// http.FileServer's own ETag handling.
+		// redeploy. The assets themselves are content-hashed and get long
+		// cache lifetimes in serveStaticFile.
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		http.ServeFile(w, r, index)
+		serveStaticFile(w, r, index, "/index.html")
 	})
+}
+
+func serveStaticFile(w http.ResponseWriter, r *http.Request, filePath, requestPath string) {
+	if cacheControl := cacheControlForStaticPath(requestPath); cacheControl != "" {
+		w.Header().Set("Cache-Control", cacheControl)
+	}
+	if !isCompressibleStaticPath(requestPath) || (r.Method != http.MethodGet && r.Method != http.MethodHead) {
+		http.ServeFile(w, r, filePath)
+		return
+	}
+
+	w.Header().Add("Vary", "Accept-Encoding")
+	if clientAcceptsEncoding(r, "br") && serveEncodedStaticFile(w, r, filePath+".br", requestPath, "br") {
+		return
+	}
+	if clientAcceptsEncoding(r, "gzip") && serveEncodedStaticFile(w, r, filePath+".gz", requestPath, "gzip") {
+		return
+	}
+	http.ServeFile(w, r, filePath)
+}
+
+func serveEncodedStaticFile(w http.ResponseWriter, r *http.Request, encodedPath, originalPath, encoding string) bool {
+	f, err := os.Open(encodedPath)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil || st.IsDir() {
+		return false
+	}
+
+	if contentType := mime.TypeByExtension(filepath.Ext(originalPath)); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	w.Header().Set("Content-Encoding", encoding)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, path.Base(originalPath), st.ModTime(), f)
+	return true
+}
+
+func cacheControlForStaticPath(requestPath string) string {
+	if strings.HasPrefix(requestPath, "/assets/") {
+		return "public, max-age=31536000, immutable"
+	}
+	return ""
+}
+
+func isCompressibleStaticPath(requestPath string) bool {
+	switch strings.ToLower(filepath.Ext(requestPath)) {
+	case ".css", ".html", ".js", ".json", ".map", ".svg", ".txt", ".wasm", ".xml":
+		return true
+	default:
+		return false
+	}
+}
+
+func clientAcceptsEncoding(r *http.Request, encoding string) bool {
+	for _, rawPart := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		part := strings.TrimSpace(rawPart)
+		if part == "" {
+			continue
+		}
+		pieces := strings.Split(part, ";")
+		if !strings.EqualFold(strings.TrimSpace(pieces[0]), encoding) {
+			continue
+		}
+		for _, rawParam := range pieces[1:] {
+			param := strings.TrimSpace(rawParam)
+			if !strings.HasPrefix(param, "q=") {
+				continue
+			}
+			q, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(param, "q=")), 64)
+			if err == nil && q <= 0 {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }

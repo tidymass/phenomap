@@ -215,8 +215,13 @@
               </p>
             </div>
           </div>
-          <div class="schema-image-frame">
-            <KnowledgeGraphGlobe @browse-click="goToGraphBrowse" />
+          <div ref="schemaFrameRef" class="schema-image-frame">
+            <KnowledgeGraphGlobe v-if="shouldLoadGlobe" @browse-click="goToGraphBrowse" />
+            <div v-else class="schema-globe-placeholder" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
           </div>
         </div>
       </section>
@@ -224,12 +229,16 @@
 </template>
 
 <script setup>
-import { onMounted, ref, reactive, computed } from 'vue'
+import { defineAsyncComponent, onMounted, onUnmounted, ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStats } from '../api.js'
-import KnowledgeGraphGlobe from '../components/KnowledgeGraphGlobe.vue'
+
+const KnowledgeGraphGlobe = defineAsyncComponent(() => import('../components/KnowledgeGraphGlobe.vue'))
 
 const router = useRouter()
+const schemaFrameRef = ref(null)
+const shouldLoadGlobe = ref(false)
+let globeObserver = null
 
 // This is just a simplified entry point into the real Search page (under
 // Analysis) -- submitting here never runs a query or shows results inline,
@@ -303,6 +312,31 @@ function goToGraphBrowse() {
   router.push('/search')
 }
 
+function loadGlobe() {
+  shouldLoadGlobe.value = true
+  if (globeObserver) {
+    globeObserver.disconnect()
+    globeObserver = null
+  }
+}
+
+function watchGlobeVisibility() {
+  if (shouldLoadGlobe.value) return
+  const el = schemaFrameRef.value
+  if (!el) return
+  if (!('IntersectionObserver' in window)) {
+    loadGlobe()
+    return
+  }
+  globeObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadGlobe()
+    },
+    { rootMargin: '0px', threshold: 0.01 },
+  )
+  globeObserver.observe(el)
+}
+
 // --- live stats strip ---
 const stats = ref(null)
 const statOrder = ['Metabolite', 'Module', 'Study', 'Phenotype']
@@ -350,6 +384,12 @@ onMounted(async () => {
   } catch (e) {
     // Homepage should still render fine without live counts.
   }
+})
+
+onMounted(watchGlobeVisibility)
+
+onUnmounted(() => {
+  if (globeObserver) globeObserver.disconnect()
 })
 </script>
 
@@ -821,6 +861,34 @@ onMounted(async () => {
   border-radius: 14px;
   border: 1px solid #e0e6ee;
   background: linear-gradient(180deg, #fbfdff 0%, #f2f5fa 100%);
+}
+.schema-globe-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(15, 124, 150, 0.09), transparent 34%),
+    linear-gradient(180deg, #fbfdff 0%, #f2f5fa 100%);
+}
+.schema-globe-placeholder span {
+  position: absolute;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 124, 150, 0.16);
+}
+.schema-globe-placeholder span:nth-child(1) {
+  width: 44%;
+  aspect-ratio: 1;
+}
+.schema-globe-placeholder span:nth-child(2) {
+  width: 58%;
+  aspect-ratio: 1;
+  transform: rotate(32deg) scaleY(0.42);
+}
+.schema-globe-placeholder span:nth-child(3) {
+  width: 58%;
+  aspect-ratio: 1;
+  transform: rotate(-32deg) scaleY(0.42);
 }
 
 @media (max-width: 960px) {
