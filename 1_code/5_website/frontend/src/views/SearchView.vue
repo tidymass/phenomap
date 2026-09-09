@@ -390,6 +390,10 @@ onMounted(async () => {
   background: linear-gradient(128deg, #123a55 0%, #245c7e 52%, #2f8383 100%);
   background-size: 220% 220%;
   animation: hero-gradient-shift 10s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(410px, 46svh, 560px);
   padding: 34px 24px 45px;
   text-align: center;
 }
@@ -661,6 +665,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 18px;
+  justify-content: center;
   background: transparent;
   border-radius: 0;
   box-shadow: none;
@@ -977,6 +982,49 @@ onMounted(async () => {
   }
   .tool-visual {
     margin-bottom: 16px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .hero {
+    min-height: clamp(500px, 48svh, 640px);
+    padding-top: 46px;
+    padding-bottom: 58px;
+  }
+  .stats-container {
+    max-width: 1320px;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(4, minmax(0, 300px));
+  }
+  .container-wide {
+    max-width: 1180px;
+  }
+  .feature-grid {
+    gap: 36px;
+  }
+  .schema-section-grid {
+    grid-template-columns: minmax(300px, 380px) minmax(620px, 740px);
+    justify-content: center;
+  }
+}
+
+@media (min-width: 2200px) {
+  .hero {
+    min-height: 620px;
+  }
+  .stats-container {
+    max-width: 1240px;
+  }
+  .container-wide {
+    max-width: 1120px;
+  }
+  .feature-grid {
+    gap: 32px;
+  }
+  .schema-section-grid {
+    grid-template-columns: 360px 700px;
+    gap: 52px;
   }
 }
 </style>
