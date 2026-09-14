@@ -5,3 +5,8 @@
 
 2_data
 3_data_analysis
+
+# Runtime data is distributed separately, not committed to Git.
+neo4j/import/*.csv
+neo4j/import/*.bak*
+neo4j/.DS_Store
