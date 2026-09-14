@@ -24,6 +24,10 @@ type NodeDetail struct {
 	// this resolves Phenotype <-INVESTIGATED- Study <-REPORTED_IN- Module to
 	// give the Phenotype page's Related Modules card something to link.
 	PhenotypeModules []Neighbor `json:"phenotype_modules"`
+	// StudyModules is Study-only and returns all modules for the study with
+	// module-node comparison metadata. The generic Neighbors payload only has
+	// relationship properties, so it cannot support Comparison_Label grouping.
+	StudyModules []StudyModule `json:"study_modules"`
 }
 
 type MetaboliteEdge struct {
@@ -37,6 +41,23 @@ type Neighbor struct {
 	NeighborLabel string         `json:"neighbor_label"`
 	NeighborID    string         `json:"neighbor_id"`
 	NeighborName  string         `json:"neighbor_name"`
+}
+
+type StudyModule struct {
+	ModuleID             string `json:"module_id"`
+	ModuleTitle          string `json:"module_title"`
+	HypothesisType       string `json:"hypothesis_type"`
+	ConfidenceLabel      string `json:"confidence_label"`
+	GlobalDirection      string `json:"global_direction"`
+	ComparisonID         string `json:"comparison_id"`
+	ComparisonLabel      string `json:"comparison_label"`
+	ComparisonKind       string `json:"comparison_kind"`
+	ComparisonDesignType string `json:"comparison_design_type"`
+	ResultScope          string `json:"result_scope"`
+	CaseValue            string `json:"case_value"`
+	ControlValue         string `json:"control_value"`
+	NCase                string `json:"n_case"`
+	NControl             string `json:"n_control"`
 }
 
 type RelCount struct {
@@ -104,6 +125,25 @@ const phenotypeModulesQuery = `
 	MATCH (n:Phenotype {Lab_ID: $id})<-[:INVESTIGATED]-(:Study)<-[:REPORTED_IN]-(mod:Module)
 	RETURN DISTINCT mod.Lab_ID AS neighbor_id, coalesce(mod.title, '') AS neighbor_name
 	ORDER BY neighbor_name
+`
+
+const studyModulesQuery = `
+	MATCH (n:Study {Lab_ID: $id})<-[:REPORTED_IN]-(mod:Module)
+	RETURN mod.Lab_ID AS module_id,
+	       coalesce(mod.title, mod.module_id, '') AS module_title,
+	       coalesce(mod.hypothesis_type, '') AS hypothesis_type,
+	       coalesce(mod.confidence_label, '') AS confidence_label,
+	       coalesce(mod.global_direction, '') AS global_direction,
+	       coalesce(mod.Comparison_ID, '') AS comparison_id,
+	       coalesce(mod.Comparison_Label, '') AS comparison_label,
+	       coalesce(mod.Comparison_Kind, '') AS comparison_kind,
+	       coalesce(mod.Comparison_Design_Type, '') AS comparison_design_type,
+	       coalesce(mod.Result_Scope, '') AS result_scope,
+	       coalesce(toString(mod.Case_Value), '') AS case_value,
+	       coalesce(toString(mod.Control_Value), '') AS control_value,
+	       coalesce(toString(mod.N_Case), '') AS n_case,
+	       coalesce(toString(mod.N_Control), '') AS n_control
+	ORDER BY comparison_label, module_title, module_id
 `
 
 // moduleMetaboliteEdgesQuery finds the real metabolite-metabolite edges
@@ -179,6 +219,7 @@ func (db *DB) GetNode(ctx context.Context, label, id string, neighborCap int) (*
 	var studyPhenotypes []Neighbor
 	var metaboliteEdges []MetaboliteEdge
 	var phenotypeModules []Neighbor
+	var studyModules []StudyModule
 	if actualLabel == "Module" {
 		phRows, err := db.query(ctx, modulePhenotypesQuery, map[string]any{"id": id})
 		if err != nil {
@@ -219,6 +260,30 @@ func (db *DB) GetNode(ctx context.Context, label, id string, neighborCap int) (*
 				NeighborName:  asString(row["neighbor_name"]),
 			})
 		}
+	} else if actualLabel == "Study" {
+		modRows, err := db.query(ctx, studyModulesQuery, map[string]any{"id": id})
+		if err != nil {
+			return nil, false, err
+		}
+		studyModules = make([]StudyModule, 0, len(modRows))
+		for _, row := range modRows {
+			studyModules = append(studyModules, StudyModule{
+				ModuleID:             asString(row["module_id"]),
+				ModuleTitle:          asString(row["module_title"]),
+				HypothesisType:       asString(row["hypothesis_type"]),
+				ConfidenceLabel:      asString(row["confidence_label"]),
+				GlobalDirection:      asString(row["global_direction"]),
+				ComparisonID:         asString(row["comparison_id"]),
+				ComparisonLabel:      asString(row["comparison_label"]),
+				ComparisonKind:       asString(row["comparison_kind"]),
+				ComparisonDesignType: asString(row["comparison_design_type"]),
+				ResultScope:          asString(row["result_scope"]),
+				CaseValue:            asString(row["case_value"]),
+				ControlValue:         asString(row["control_value"]),
+				NCase:                asString(row["n_case"]),
+				NControl:             asString(row["n_control"]),
+			})
+		}
 	}
 
 	return &NodeDetail{
@@ -229,5 +294,6 @@ func (db *DB) GetNode(ctx context.Context, label, id string, neighborCap int) (*
 		StudyPhenotypes:  studyPhenotypes,
 		MetaboliteEdges:  metaboliteEdges,
 		PhenotypeModules: phenotypeModules,
+		StudyModules:     studyModules,
 	}, true, nil
 }

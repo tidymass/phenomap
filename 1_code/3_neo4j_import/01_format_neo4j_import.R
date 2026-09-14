@@ -124,5 +124,14 @@ format_neo4j_import <- function(
 }
 
 if (identical(environment(), globalenv()) && !interactive()) {
-  format_neo4j_import()
+  args <- list(
+    entity_dir = file.path("2_data", "tidy_entity"),
+    relationship_dir = file.path("2_data", "tidy_relationship"),
+    output_dir = file.path("2_data", "neo4j", "import")
+  )
+  for (arg in commandArgs(trailingOnly = TRUE)) {
+    kv <- strsplit(sub("^--", "", arg), "=", fixed = TRUE)[[1]]
+    if (length(kv) == 2 && kv[[1]] %in% names(args)) args[[kv[[1]]]] <- kv[[2]]
+  }
+  format_neo4j_import(args$entity_dir, args$relationship_dir, args$output_dir)
 }

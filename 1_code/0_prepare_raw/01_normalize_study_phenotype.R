@@ -272,7 +272,7 @@ read_case_study_row <- function(case_dir) {
   # phenomap_read_study_meta_row() (00_phenomap_helpers.R) tolerates both the
   # old nested study_meta.json shape and the new flat shape -- see its
   # header comment.
-  fields <- phenomap_read_study_meta_row(meta)
+  fields <- phenomap_read_study_meta_row(meta, case_dir = case_dir)
 
   data.frame(
     study_id = phenomap_clean_scalar(meta$study_id %||% basename(case_dir), basename(case_dir)),

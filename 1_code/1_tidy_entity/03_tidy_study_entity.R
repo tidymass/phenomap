@@ -61,7 +61,7 @@ read_studies <- function(case_root, repository, output_dir, case_control_only = 
   rows <- lapply(case_dirs, function(case_dir) {
     meta <- phenomap_read_json(file.path(case_dir, "study_meta.json"))
     study_id <- phenomap_clean_scalar(meta$study_id %||% basename(case_dir), basename(case_dir))
-    fields <- phenomap_read_study_meta_row(meta)
+    fields <- phenomap_read_study_meta_row(meta, case_dir = case_dir)
     data.frame(
       Accession = study_id,
       Repository = repository,
@@ -75,6 +75,7 @@ read_studies <- function(case_root, repository, output_dir, case_control_only = 
       Publication_DOI = fields$publication_doi,
       Link = phenomap_make_study_url(study_id, repository),
       MS2_Supported = fields$ms2_supported,
+      MS2_Annotation_Count = fields$ms2_annotation_count,
       stringsAsFactors = FALSE
     )
   })
@@ -139,7 +140,8 @@ build_study_entity <- function(case_root_mw, case_root_ml,
   out <- out[, c(
     "Lab_ID", "Accession", "Repository", "Title", "Study_Summary", "Study_Design",
     "Sample_Size", "Biospecimen", "Chromatography", "Mass_Spectrometry",
-    "Publication_DOI", "Link", "Phenotype", "Phenotype_ID", "MS2_Supported"
+    "Publication_DOI", "Link", "Phenotype", "Phenotype_ID", "MS2_Supported",
+    "MS2_Annotation_Count"
   )]
 
   phenomap_write_csv(out, file.path(output_dir, "nodes_study.csv"))

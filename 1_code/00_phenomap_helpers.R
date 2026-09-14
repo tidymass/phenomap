@@ -85,10 +85,18 @@ phenomap_read_phenotype_overrides <- function(phenotype_dir, keep) {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
-  manual <- as.data.frame(readxl::read_excel(file.path(phenotype_dir, "phenotype_manual_short.xlsx")))
+  manual_path <- file.path(phenotype_dir, "phenotype_manual_short.xlsx")
+  manual <- if (file.exists(manual_path)) {
+    as.data.frame(readxl::read_excel(manual_path))
+  } else {
+    # A newly generated server batch may not have been manually reviewed yet.
+    # Keep the automatic selection, while allowing validation to report that
+    # no manual override file was supplied.
+    data.frame(study_id = character(0), stringsAsFactors = FALSE)
+  }
 
-  for (col in setdiff(keep, names(final))) final[[col]] <- NA_character_
-  for (col in setdiff(keep, names(manual))) manual[[col]] <- NA_character_
+  for (col in setdiff(keep, names(final))) final[[col]] <- rep(NA_character_, nrow(final))
+  for (col in setdiff(keep, names(manual))) manual[[col]] <- rep(NA_character_, nrow(manual))
   final <- final[, keep, drop = FALSE]
   manual <- manual[, keep, drop = FALSE]
 
@@ -214,9 +222,59 @@ phenomap_coalesce_scalar <- function(...) {
 # This is the single place that knows about both shapes, so every script
 # that reads study_meta.json goes through it instead of re-deriving its own
 # fallback chain (and silently drifting out of sync with the others).
-phenomap_read_study_meta_row <- function(meta) {
+phenomap_ms2_annotation_count <- function(case_dir = NULL) {
+  if (is.null(case_dir) || length(case_dir) == 0 || is.na(case_dir) || !nzchar(case_dir)) {
+    return(NA_integer_)
+  }
+
+  # New deliveries no longer carry `ms2_supported` in study_meta.json, but
+  # retain the actual MS2 annotation table. Prefer this direct evidence.
+  table_path <- file.path(case_dir, "anno_result", "annotated_table_ms2.rda")
+  if (file.exists(table_path)) {
+    count <- tryCatch({
+      env <- new.env(parent = emptyenv())
+      object_names <- load(table_path, envir = env)
+      row_counts <- vapply(object_names, function(nm) {
+        n <- tryCatch(nrow(env[[nm]]), error = function(e) NULL)
+        if (is.null(n) || length(n) == 0 || is.na(n)) 0L else as.integer(n)
+      }, integer(1))
+      if (length(row_counts) == 0) 0L else max(row_counts)
+    }, error = function(e) NA_integer_)
+    if (!is.na(count)) return(count)
+  }
+
+  # Log-only fallback for deliveries that omitted the compact RDA. Use the
+  # last match because a retry can append another run to the same log.
+  log_path <- file.path(case_dir, "anno_result", "run_log.txt")
+  if (file.exists(log_path)) {
+    count <- tryCatch({
+      lines <- readLines(log_path, warn = FALSE)
+      hits <- grep("annotated_table_ms2:[[:space:]]*[0-9]+[[:space:]]+rows", lines, value = TRUE)
+      if (length(hits) == 0) {
+        NA_integer_
+      } else {
+        line <- tail(hits, 1)
+        value <- regmatches(line, regexpr("[0-9]+(?=[[:space:]]+rows)", line, perl = TRUE))
+        suppressWarnings(as.integer(value))
+      }
+    }, error = function(e) NA_integer_)
+    if (!is.na(count)) return(count)
+  }
+
+  NA_integer_
+}
+
+phenomap_read_study_meta_row <- function(meta, case_dir = NULL) {
   study_design <- meta$study_design %||% list()
   instrument <- meta$instrument %||% list()
+  ms2_annotation_count <- phenomap_ms2_annotation_count(case_dir)
+  ms2_supported <- if (!is.na(ms2_annotation_count)) {
+    ms2_annotation_count > 0L
+  } else {
+    # Backward-compatible fallback for old deliveries that supplied only the
+    # metadata flag and not an annotation table/log.
+    isTRUE(meta$ms2_supported)
+  }
 
   list(
     study_title = phenomap_coalesce_scalar(meta$study_title, meta$title),
@@ -231,7 +289,8 @@ phenomap_read_study_meta_row <- function(meta) {
     biospecimen = phenomap_coalesce_scalar(study_design$biospecimen, meta$biospecimen),
     publication = phenomap_clean_scalar(meta$publication),
     publication_doi = phenomap_clean_scalar(meta$publication_doi),
-    ms2_supported = isTRUE(meta$ms2_supported),
+    ms2_supported = ms2_supported,
+    ms2_annotation_count = ms2_annotation_count,
     # "_type" fields are short/categorical (used for the GPT prompt);
     # "_display" fields prefer the more descriptive instrument-level value
     # and are meant for the Study node's human-readable columns.
@@ -783,7 +842,12 @@ phenomap_try_load_featuremap_resource <- function(name) {
   }
 
   if (is.null(loader)) {
-    featuremap_dir <- normalizePath(file.path("..", "featuremap"), mustWork = FALSE)
+    configured_dir <- Sys.getenv("PHENOMAP_FEATUREMAP_ROOT", "")
+    featuremap_dir <- if (nzchar(configured_dir)) {
+      normalizePath(configured_dir, mustWork = FALSE)
+    } else {
+      normalizePath(file.path("..", "featuremap"), mustWork = FALSE)
+    }
     resource_file <- file.path(featuremap_dir, "R", "5_resource_cache.R")
     if (file.exists(resource_file)) {
       env <- new.env(parent = globalenv())

@@ -255,6 +255,53 @@
             </dl>
           </div>
 
+          <div class="card" id="study-modules" v-if="studyModuleGroups.length">
+            <h2>
+              <TermInfo label="Modules In This Study" :definition="termDefinition('Modules In This Study')" heading />
+              <span class="count">{{ studyModules.length }}</span>
+            </h2>
+
+            <div class="study-module-groups">
+              <section class="study-module-group" v-for="group in studyModuleGroups" :key="group.key">
+                <div class="study-module-group-head">
+                  <div>
+                    <h3>{{ group.label }}</h3>
+                    <div class="study-module-meta" v-if="group.meta.length">
+                      <span v-for="item in group.meta" :key="item.label">{{ item.label }}: {{ item.value }}</span>
+                    </div>
+                  </div>
+                  <span class="count">{{ group.items.length }}</span>
+                </div>
+
+                <div class="neighbor-list study-module-list">
+                  <router-link
+                    v-for="m in group.items"
+                    :key="m.module_id"
+                    :to="`/node/Module/${m.module_id}`"
+                    class="neighbor-row study-module-row"
+                    :style="{ '--accent': typeColor('Module') }"
+                  >
+                    <span class="badge small" data-label="Module">Module</span>
+                    <span class="neighbor-row-name">{{ m.module_title || m.module_id }}</span>
+                    <span
+                      class="neighbor-row-tier"
+                      v-if="m.confidence_label"
+                      :class="`tier-${String(m.confidence_label).toLowerCase()}`"
+                    >{{ m.confidence_label }}</span>
+                    <span
+                      class="direction-badge"
+                      v-if="m.global_direction"
+                      :class="`dir-${String(m.global_direction).toLowerCase()}`"
+                    >{{ m.global_direction }}</span>
+                    <svg class="neighbor-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="m9 6 6 6-6 6" />
+                    </svg>
+                  </router-link>
+                </div>
+              </section>
+            </div>
+          </div>
+
           <div class="card" id="source" v-if="studySourceItems.length || p.Link || doiUrl">
             <h2><TermInfo label="Source & Publication" :definition="termDefinition('Source & Publication')" heading /></h2>
             <dl class="props" v-if="studySourceItems.length">
@@ -379,9 +426,9 @@
              Network draws a hop-limited graph of this entity's neighbors
              (Metabolite<->Module edges excluded -- that's a membership
              fact, already shown in the curated cards above and in the
-             List tab, not "what's connected to what"). List is the
-             original per-relationship-type table, unfiltered. ============ -->
-        <div id="relationships" v-if="neighborGroups.length">
+             List tab, not "what's connected to what"). List mirrors the
+             same hop-limited, filtered graph state as Network. ============ -->
+        <div id="relationships" v-if="hasRelationshipData">
           <div class="nd-tabs" role="tablist">
             <button
               type="button"
@@ -463,16 +510,57 @@
             </div>
           </div>
 
-          <div class="card" v-show="relTab === 'list'" v-for="group in neighborGroups" :key="group.relType">
+          <div class="card nd-list-controls-card" v-show="relTab === 'list'">
             <h2>
-              <TermInfo
-                :label="relTypeLabel(group.relType, node.label)"
-                :definition="termDefinition(relTypeLabel(group.relType, node.label))"
-                heading
-              />
-              <span class="count">
-                {{ group.items.length }}{{ group.total > group.items.length ? ` of ${group.total}` : '' }}
-              </span>
+              List Filters
+              <span class="count">{{ hopCount }} hop{{ hopCount === 1 ? '' : 's' }}</span>
+            </h2>
+            <div class="nd-list-controls">
+              <div class="nd-control-group">
+                <div class="nd-control-label">Hops</div>
+                <div class="nd-graph-hops">
+                  <button
+                    v-for="h in [1, 2, 3]"
+                    :key="h"
+                    type="button"
+                    class="nd-graph-hop-btn"
+                    :class="{ active: hopCount === h }"
+                    @click="setHopCount(h)"
+                  >{{ h }}</button>
+                </div>
+              </div>
+
+              <div class="nd-control-group" v-if="graphRelTypes.length">
+                <div class="nd-control-label">Relationship Types</div>
+                <label class="nd-filter-check" v-for="t in graphRelTypes" :key="t.relType">
+                  <input
+                    type="checkbox"
+                    :checked="isRelTypeVisible(t.relType)"
+                    @change="toggleRelType(t.relType)"
+                  />
+                  {{ t.label }}
+                </label>
+              </div>
+
+              <div class="nd-control-group" v-if="graphEntityTypes.length">
+                <div class="nd-control-label">Entity Types</div>
+                <label class="nd-filter-check" v-for="t in graphEntityTypes" :key="t.label">
+                  <input
+                    type="checkbox"
+                    :checked="isEntityTypeVisible(t.label)"
+                    @change="toggleEntityType(t.label)"
+                  />
+                  <i class="dot" :style="{ background: t.color }"></i>
+                  {{ t.label }}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" v-show="relTab === 'list'" v-for="group in neighborGroups" :key="group.key">
+            <h2>
+              <TermInfo :label="group.label" :definition="termDefinition(group.label)" heading />
+              <span class="count">{{ group.items.length }}</span>
             </h2>
             <div class="neighbor-list">
               <router-link
@@ -484,6 +572,7 @@
               >
                 <span class="badge small" :data-label="n.neighbor_label">{{ n.neighbor_label }}</span>
                 <span class="neighbor-row-name">{{ n.neighbor_name || n.neighbor_id }}</span>
+                <span class="neighbor-row-rel" v-if="n.rel_label">{{ n.rel_label }}</span>
                 <span class="neighbor-row-tier" v-if="tierLabel(n)" :class="`tier-${tierLabel(n)}`">{{ tierLabel(n) }}</span>
                 <span class="neighbor-row-bar" v-if="similarityPct(n) !== null">
                   <span class="neighbor-row-bar-fill" :style="{ width: similarityPct(n) + '%' }"></span>
@@ -494,6 +583,9 @@
                 </svg>
               </router-link>
             </div>
+          </div>
+          <div class="card" v-show="relTab === 'list' && !neighborGroups.length">
+            <p class="hint">No neighbors match the selected filters.</p>
           </div>
         </div>
       </main>
@@ -880,10 +972,10 @@ async function refreshRawNeighborGraph() {
   const centerKey = `${centerLabel}::${centerId}`
   const hops = hopCount.value
 
-  const visited = new Map() // key -> { key, id, label, name, isCenter }
+  const visited = new Map() // key -> { key, id, label, name, depth, isCenter }
   const edgeKeys = new Set()
-  const edgeList = [] // [fromKey, toKey]
-  visited.set(centerKey, { key: centerKey, id: centerId, label: centerLabel, name: primaryName.value, isCenter: true })
+  const edgeList = []
+  visited.set(centerKey, { key: centerKey, id: centerId, label: centerLabel, name: primaryName.value, depth: 0, isCenter: true })
 
   let frontier = [{ key: centerKey, label: centerLabel, id: centerId }]
   let hop1Total = 0
@@ -920,14 +1012,14 @@ async function refreshRawNeighborGraph() {
         const key = `${n.neighbor_label}::${n.neighbor_id}`
         if (key === from.key) continue
         if (!visited.has(key)) {
-          visited.set(key, { key, id: n.neighbor_id, label: n.neighbor_label, name: n.neighbor_name || n.neighbor_id })
+          visited.set(key, { key, id: n.neighbor_id, label: n.neighbor_label, name: n.neighbor_name || n.neighbor_id, depth: hop })
           nextFrontier.push({ key, label: n.neighbor_label, id: n.neighbor_id })
           added++
         }
         const edgeKey = [from.key, key].sort().join('|')
         if (!edgeKeys.has(edgeKey)) {
           edgeKeys.add(edgeKey)
-          edgeList.push({ from: from.key, to: key, relType: n.rel_type })
+          edgeList.push({ from: from.key, to: key, relType: n.rel_type, relProps: n.rel_props || {} })
         }
       }
     }
@@ -938,6 +1030,28 @@ async function refreshRawNeighborGraph() {
   if (thisRequest !== graphRequestId) return
 
   rawNeighborGraph.value = { nodeList: [...visited.values()], edgeList, truncated, hop1Total }
+}
+
+function filteredRawNeighborGraph(raw) {
+  if (!raw) return null
+
+  const keepEntity = new Set()
+  for (const info of raw.nodeList) {
+    if (info.isCenter || isEntityTypeVisible(info.label)) keepEntity.add(info.key)
+  }
+
+  const edgeList = raw.edgeList.filter(
+    (e) => keepEntity.has(e.from) && keepEntity.has(e.to) && isRelTypeVisible(e.relType)
+  )
+  const centerInfo = raw.nodeList.find((info) => info.isCenter)
+  const connected = new Set(centerInfo ? [centerInfo.key] : [])
+  for (const e of edgeList) {
+    connected.add(e.from)
+    connected.add(e.to)
+  }
+  const nodeList = raw.nodeList.filter((info) => keepEntity.has(info.key) && connected.has(info.key))
+
+  return { ...raw, centerInfo, nodeList, edgeList }
 }
 
 // Lays out whatever survives the entity-type filter -- recomputed
@@ -951,20 +1065,9 @@ const neighborGraph = computed(() => {
   // edge type -- apply both, then drop any non-center node left with no
   // surviving edge (rather than showing it floating, disconnected from
   // everything else in the graph).
-  const keepEntity = new Set()
-  for (const info of raw.nodeList) {
-    if (info.isCenter || isEntityTypeVisible(info.label)) keepEntity.add(info.key)
-  }
-  const edgeList = raw.edgeList.filter(
-    (e) => keepEntity.has(e.from) && keepEntity.has(e.to) && isRelTypeVisible(e.relType)
-  )
-  const centerInfo = raw.nodeList.find((info) => info.isCenter)
-  const connected = new Set(centerInfo ? [centerInfo.key] : [])
-  for (const e of edgeList) {
-    connected.add(e.from)
-    connected.add(e.to)
-  }
-  const nodeList = raw.nodeList.filter((info) => keepEntity.has(info.key) && connected.has(info.key))
+  const filtered = filteredRawNeighborGraph(raw)
+  if (!filtered) return null
+  const { nodeList, edgeList } = filtered
   if (nodeList.length <= 1) return null
 
   const nodeKeys = nodeList.map((info) => info.key)
@@ -1114,6 +1217,61 @@ const studyPhenotypeLink = computed(() => {
   return { id, name }
 })
 
+const studyModules = computed(() => {
+  if (!node.value || node.value.label !== 'Study') return []
+  return node.value.study_modules || []
+})
+
+function cleanStudyModuleValue(value) {
+  if (value === null || value === undefined) return ''
+  const out = String(value).trim()
+  if (!out || ['NA', 'NULL', 'NAN', '<NA>'].includes(out.toUpperCase())) return ''
+  return out
+}
+
+function studyModuleGroupMeta(module) {
+  const pairs = [
+    ['Case', module.case_value],
+    ['Control', module.control_value],
+    ['N case', module.n_case],
+    ['N control', module.n_control],
+    ['Design', module.comparison_design_type],
+    ['Scope', module.result_scope],
+  ]
+  return pairs
+    .map(([label, value]) => ({ label, value: cleanStudyModuleValue(value) }))
+    .filter((item) => item.value)
+}
+
+const studyModuleGroups = computed(() => {
+  if (!studyModules.value.length) return []
+  const groups = new Map()
+  for (const module of studyModules.value) {
+    const label = cleanStudyModuleValue(module.comparison_label) || 'Study-level comparison'
+    if (!groups.has(label)) {
+      groups.set(label, {
+        key: label,
+        label,
+        metaSource: module,
+        items: [],
+      })
+    }
+    groups.get(label).items.push(module)
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      meta: studyModuleGroupMeta(group.metaSource),
+      items: group.items.slice().sort((a, b) => {
+        const aName = cleanStudyModuleValue(a.module_title) || cleanStudyModuleValue(a.module_id)
+        const bName = cleanStudyModuleValue(b.module_title) || cleanStudyModuleValue(b.module_id)
+        return aName.localeCompare(bName)
+      }),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+})
+
 const studySourceItems = computed(() => {
   if (!node.value || node.value.label !== 'Study') return []
   return [
@@ -1225,26 +1383,69 @@ function tierLabel(n) {
   return v ? String(v).toLowerCase() : null
 }
 
-// MEMBER_OF (metabolite <-> module) is omitted for Module pages -- it's the
-// exact same relationship already shown, broken out by anchor/supporting/
-// contextual, in the Metabolite Membership card above. INVESTIGATED is
-// omitted for Study pages for the same reason -- it's the exact same
-// phenotype already shown as a linked badge in the Phenotype card above.
+const hasRelationshipData = computed(() => {
+  if (!node.value) return false
+  const raw = rawNeighborGraph.value
+  if (raw?.nodeList?.some((info) => !info.isCenter)) return true
+  return (node.value.neighbors || []).length > 0
+})
+
+// List tab mirrors the Network tab: same hop depth, same relationship-type
+// and entity-type filters, and the same capped fetched graph. Grouping by
+// hop makes the user-selected 1/2/3-hop scope explicit.
 const neighborGroups = computed(() => {
-  if (!node.value) return []
-  const counts = Object.fromEntries((node.value.relationship_counts || []).map((c) => [c.rel_type, c.count]))
-  const groups = {}
-  for (const n of node.value.neighbors || []) {
-    if (node.value.label === 'Module' && n.rel_type === 'MEMBER_OF') continue
-    if (node.value.label === 'Study' && n.rel_type === 'INVESTIGATED') continue
-    if (!groups[n.rel_type]) groups[n.rel_type] = []
-    groups[n.rel_type].push(n)
+  if (!node.value || !rawNeighborGraph.value) return []
+  const filtered = filteredRawNeighborGraph(rawNeighborGraph.value)
+  if (!filtered) return []
+
+  const centerKey = filtered.centerInfo?.key
+  const edgesByNode = new Map()
+  for (const edge of filtered.edgeList) {
+    for (const key of [edge.from, edge.to]) {
+      if (key === centerKey) continue
+      if (!edgesByNode.has(key)) edgesByNode.set(key, [])
+      edgesByNode.get(key).push(edge)
+    }
   }
-  return Object.entries(groups).map(([relType, items]) => ({
-    relType,
-    items,
-    total: counts[relType] || items.length,
-  }))
+
+  const groups = new Map()
+  for (const info of filtered.nodeList) {
+    if (info.isCenter || !edgesByNode.has(info.key)) continue
+    const depth = Math.max(1, Number(info.depth) || 1)
+    const key = `hop-${depth}`
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        depth,
+        label: `Hop ${depth} Neighbors`,
+        items: [],
+      })
+    }
+    const edges = edgesByNode.get(info.key) || []
+    const relTypes = [...new Set(edges.map((edge) => edge.relType).filter(Boolean))]
+    groups.get(key).items.push({
+      neighbor_label: info.label,
+      neighbor_id: info.id,
+      neighbor_name: info.name,
+      rel_type: relTypes[0] || '',
+      rel_props: edges[0]?.relProps || {},
+      rel_label: relTypes.map(formatRelType).join(', '),
+    })
+  }
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      items: group.items.slice().sort((a, b) => {
+        const aType = String(a.neighbor_label || '')
+        const bType = String(b.neighbor_label || '')
+        if (aType !== bType) return aType.localeCompare(bType)
+        const aName = String(a.neighbor_name || a.neighbor_id || '')
+        const bName = String(b.neighbor_name || b.neighbor_id || '')
+        return aName.localeCompare(bName)
+      }),
+    }))
+    .sort((a, b) => a.depth - b.depth)
 })
 
 // Sidebar section nav -- only lists sections that actually have content.
@@ -1257,34 +1458,35 @@ const sections = computed(() => {
       originFracs.value && { id: 'origin', label: 'Metabolite Origin' },
       (relationshipItems.value.length || studyPhenotypes.value.length || pmidList.value.length) && { id: 'phenotype-relationship', label: 'Phenotype Relationship' },
       membershipGroups.value.length && { id: 'metabolite-membership', label: 'Metabolite Membership' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
+      hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Study') {
     return [
       studyDesignItems.value.length && { id: 'study-design', label: 'Study Design' },
       studyPhenotypeLink.value && { id: 'phenotype', label: 'Phenotype' },
+      studyModuleGroups.value.length && { id: 'study-modules', label: 'Modules' },
       (studySourceItems.value.length || p.value.Link || doiUrl.value) && { id: 'source', label: 'Source & Publication' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
+      hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Phenotype') {
     return [
       (phenotypeOntologyItems.value.length || p.value.OLS_Link) && { id: 'ontology', label: 'Ontology Reference' },
       phenotypeModules.value.length && { id: 'related-modules', label: 'Related Modules' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
+      hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   if (node.value.label === 'Metabolite') {
     return [
       metaboliteClassificationItems.value.length && { id: 'classification', label: 'Chemical Classification' },
       (metaboliteIdentifierItems.value.length || p.value.HMDB_URL || p.value.KEGG_URL) && { id: 'identifiers', label: 'Chemical Identifiers' },
-      neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
+      hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
   }
   return [
     { id: 'overview', label: 'Overview' },
-    neighborGroups.value.length && { id: 'relationships', label: 'Connections' },
+    hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
   ].filter(Boolean)
 })
 
@@ -1594,6 +1796,14 @@ onBeforeUnmount(() => {
   border: 1px solid #e6e9f5;
   border-radius: 10px;
 }
+.nd-list-controls-card {
+  padding-bottom: 18px;
+}
+.nd-list-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
+}
 .nd-control-group {
   display: flex;
   flex-direction: column;
@@ -1813,6 +2023,47 @@ h2 {
 .phenotype-badge:hover {
   background: rgba(179, 86, 44, 0.18);
 }
+.study-module-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.study-module-group {
+  padding-top: 16px;
+  border-top: 1px solid #edf1f5;
+}
+.study-module-group:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.study-module-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.study-module-group h3 {
+  color: #1b2145;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+.study-module-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 6px;
+  color: #6b7280;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.study-module-list {
+  border-top: 1px solid #f0f1f6;
+}
+.study-module-row .direction-badge {
+  flex-shrink: 0;
+}
 .dir-up {
   background: rgba(26, 143, 94, 0.12);
   color: #1a8f5e;
@@ -1864,6 +2115,22 @@ h2 {
   letter-spacing: 0.02em;
   padding: 2px 8px;
   border-radius: 999px;
+}
+.neighbor-row-rel {
+  flex-shrink: 0;
+  max-width: 190px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f0f2f9;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tier-high {
   background: rgba(26, 143, 94, 0.12);
@@ -2106,6 +2373,9 @@ h2 {
     flex: 0 0 auto;
     width: 100%;
   }
+  .nd-list-controls {
+    grid-template-columns: 1fr;
+  }
   .nd-sidebar {
     position: static;
     flex: 0 0 auto;
@@ -2130,6 +2400,18 @@ h2 {
   }
   .nd-content {
     max-width: none;
+  }
+  .study-module-group-head,
+  .study-module-row {
+    align-items: flex-start;
+  }
+  .study-module-row {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .study-module-row .neighbor-row-name {
+    flex-basis: calc(100% - 92px);
+    white-space: normal;
   }
 }
 </style>
