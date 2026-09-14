@@ -136,9 +136,6 @@ func handleEnrichment(client *EnrichmentClient) http.HandlerFunc {
 		if req.IDType == "" {
 			req.IDType = "hmdb"
 		}
-		if req.Method == "" {
-			req.Method = "fisher"
-		}
 		if req.FDRCutoff == 0 {
 			req.FDRCutoff = 0.05
 		}
@@ -152,6 +149,25 @@ func handleEnrichment(client *EnrichmentClient) http.HandlerFunc {
 		result, err := client.Run(ctx, req)
 		if err != nil {
 			log.Printf("enrichment error: %v", err)
+			writeError(w, http.StatusBadGateway, "enrichment service failed: "+err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(result)
+	}
+}
+
+// GET /api/enrichment/meta
+func handleEnrichmentMeta(client *EnrichmentClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		result, err := client.Meta(ctx)
+		if err != nil {
+			log.Printf("enrichment meta error: %v", err)
 			writeError(w, http.StatusBadGateway, "enrichment service failed: "+err.Error())
 			return
 		}
@@ -343,7 +359,7 @@ func handleContact(emailCfg EmailConfig) http.HandlerFunc {
 	}
 }
 
-// GET /api/path?from_label=X&from_id=Y&to_label=A&to_id=B&max_hops=5
+// GET /api/path?from_label=X&from_id=Y&to_label=A&to_id=B
 func handlePath(db *DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -356,19 +372,12 @@ func handlePath(db *DB) http.HandlerFunc {
 			return
 		}
 
-		maxHops := defaultPathHops
-		if v := q.Get("max_hops"); v != "" {
-			if parsed, err := strconv.Atoi(v); err == nil {
-				maxHops = parsed
-			}
-		}
-
 		// Path finding is heavier than a single-node lookup, so this gets
 		// a longer timeout than the other handlers.
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 
-		graph, err := db.FindPathGraph(ctx, fromLabel, fromID, toLabel, toID, maxHops)
+		graph, err := db.FindPathGraph(ctx, fromLabel, fromID, toLabel, toID)
 		if err != nil {
 			log.Printf("path error: %v", err)
 			writeError(w, http.StatusInternalServerError, "path query failed")

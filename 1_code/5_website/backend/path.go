@@ -39,17 +39,11 @@ type PathGraph struct {
 	// Hops is the true shortest distance between the two endpoints, or nil
 	// if they aren't connected within maxHops at all.
 	Hops *int64 `json:"hops"`
-	// Truncated is set if the visited-node safety cap during traversal was
-	// hit -- the graph shown may be missing some legitimate connections for a
-	// very well-connected endpoint (e.g. a Module with a huge SIMILAR_TO
-	// neighborhood).
+	// Truncated is set when the two endpoints have more equally-short routes
+	// between them than maxShortestPaths enumerates, so the drawing is a
+	// representative sample of those routes rather than all of them. It never
+	// casts doubt on Hops, which comes from an exact, uncapped query.
 	Truncated bool `json:"truncated"`
-}
-
-// rawEdge is one relationship as fetched from Neo4j, before any filtering.
-type rawEdge struct {
-	From, To, Type string
-	Props          map[string]any
 }
 
 // nodeLookupQuery confirms a node exists and gets its display name, before
@@ -71,48 +65,48 @@ const nodeInfoQuery = `
 	       coalesce(n.Accession, n.Phenotype, n.title, n.module_id, '') AS name
 `
 
-// subgraphRelationshipsQuery fetches the complete induced subgraph -- every
-// relationship between any two nodes both within maxLevel hops of the seed
-// -- via APOC's apoc.path.subgraphAll, in one native call.
+// shortestPathEdgesQuery returns every relationship that lies on a shortest
+// connection between the two endpoints, via Neo4j's native allShortestPaths.
 //
-// This is the single source of truth for the whole connection graph: every
-// downstream computation (distance from fromID, distance from toID, which
-// edges qualify as "between" the two endpoints) is derived in Go from
-// exactly this edge set, rather than from separate Neo4j calls. That matters
-// because two independent APOC traversals over the same seed/config aren't
-// guaranteed to explore in the same order or hit their `limit` cap at the
-// same point -- an earlier version of this file ran a *separate*
-// apoc.path.expandConfig call (just for fromID's own distance table) and
-// this subgraphAll call side by side, and on well-connected pairs they could
-// genuinely disagree about which nodes got reached before truncation, which
-// showed up as an endpoint the backend confidently reported "5 hops" to but
-// then rendered with zero edges anywhere near it. Computing every distance
-// locally, over this one fetched edge set, makes that kind of disagreement
-// structurally impossible: there's only one edge set anything downstream can
-// see.
+// This replaces an earlier apoc.path.subgraphAll approach that fetched the
+// whole induced subgraph within maxHops of ONE endpoint and then filtered it
+// down in Go. That was fine on the old, sparse graph, but SIMILAR_TO grew
+// from ~179k to ~1.67M relationships: the 5-hop ball around any Phenotype is
+// now ~13,700 nodes -- essentially the entire 13,756-node graph -- so the
+// fetch always hit its node cap, and the part that got cut was precisely the
+// half near the *other* endpoint. The result was the worst possible outcome:
+// a correct "hops: 5" from shortestHopsQuery next to an empty edge list, so
+// the frontend had a connection to report and nothing to draw with.
 //
-// labelFilter: '-Metabolite' walls Metabolite nodes off from the traversal
-// entirely (see git history for why -- MEMBER_OF/CONNECTED_WITH-mediated
-// bridges between otherwise-unrelated nodes turned out to make results
-// unreadable). Path Query's connection graph stays on the curated
-// Study/Phenotype/Module backbone: INVESTIGATED, REPORTED_IN, SIMILAR_TO.
+// allShortestPaths is bidirectional, like shortestPath, so its cost scales
+// with branchingFactor^(maxHops/2) instead of ^maxHops, and it never walks
+// territory that cannot be on a path between the endpoints. Metabolite nodes
+// stay out of Path Query because they are simply not in the relationship
+// list (MEMBER_OF/CONNECTED_WITH-mediated bridges made results unreadable --
+// see git history); no label filter is needed.
 //
-// limit caps how many nodes the traversal will expand to, as a safety valve
-// against an extremely well-connected seed -- see maxBFSVisited.
+// pathLimit bounds enumeration: ties are common here, and a pair can have
+// thousands of equally-short routes. Cypher applies LIMIT lazily, so the
+// query stops as soon as it has enough. Hitting the limit sets Truncated --
+// more paths of the same length exist, they just are not drawn.
 //
-// Requires the APOC Core plugin (see RUNBOOK.md).
-const subgraphRelationshipsQuery = `
-	MATCH (start {Lab_ID: $id})
-	CALL apoc.path.subgraphAll(start, {
-		maxLevel: $maxHops,
-		labelFilter: '-Metabolite',
-		limit: $limit
-	}) YIELD nodes, relationships
-	WITH relationships, size(nodes) AS nodeCount
-	UNWIND relationships AS r
-	RETURN startNode(r).Lab_ID AS from_id, endNode(r).Lab_ID AS to_id,
-	       type(r) AS rel_type, properties(r) AS rel_props, nodeCount
-`
+// No APOC needed. maxHops is interpolated (Cypher cannot parameterize a
+// variable-length bound); it is the maxPathHops constant, never user input.
+func shortestPathEdgesQuery(maxHops int) string {
+	return fmt.Sprintf(`
+		MATCH (a {Lab_ID: $fromId}), (b {Lab_ID: $toId})
+		MATCH p = allShortestPaths((a)-[:INVESTIGATED|REPORTED_IN|SIMILAR_TO*..%d]-(b))
+		WITH p LIMIT $pathLimit
+		WITH collect(p) AS paths
+		WITH paths, size(paths) AS pathCount
+		UNWIND paths AS p
+		UNWIND relationships(p) AS r
+		WITH pathCount, collect(DISTINCT r) AS rels
+		UNWIND rels AS r
+		RETURN startNode(r).Lab_ID AS from_id, endNode(r).Lab_ID AS to_id,
+		       type(r) AS rel_type, properties(r) AS rel_props, pathCount
+	`, maxHops)
+}
 
 // shortestHopsQuery answers "are fromID and toID connected within maxHops,
 // and if so how many hops apart" using Neo4j's native shortestPath -- a
@@ -124,18 +118,17 @@ const subgraphRelationshipsQuery = `
 // node to radius maxHops visits roughly branchingFactor^maxHops nodes, while
 // meeting in the middle from both ends visits roughly
 // 2 * branchingFactor^(maxHops/2) -- for a SIMILAR_TO fan-out in the low
-// tens, the one-sided radius-5 ball around a well-studied phenotype already
-// exceeds the old maxBFSVisited safety cap (confirmed against the current
-// graph: several phenotypes' 5-hop neighborhoods run 4000-4800+ nodes,
-// meaning "no connection found" was sometimes a false negative from hitting
-// that cap, not an actual absence of a path). The bidirectional search below
-// has no such cap and stays cheap regardless of graph size, because its cost
-// depends on maxHops/2, not maxHops -- this is the query that should decide
-// connectivity and hop count, full stop.
+// hundreds, the one-sided radius-5 ball around a well-studied phenotype now
+// covers ~13,700 of the graph's 13,756 nodes -- which is exactly why the old
+// one-sided visualization fetch had to be replaced (see
+// shortestPathEdgesQuery). The bidirectional search below has no cap and
+// stays cheap regardless of graph size, because its cost depends on
+// maxHops/2, not maxHops -- this is the query that decides connectivity and
+// hop count, full stop.
 //
 // maxHops has to be interpolated into the pattern (Cypher's variable-length
-// relationship bound isn't parameterizable) -- safe here because maxHops is
-// an int clamped server-side in FindPathGraph, never raw user input.
+// relationship bound isn't parameterizable) -- safe here because it is the
+// maxPathHops constant, never raw user input.
 func shortestHopsQuery(maxHops int) string {
 	return fmt.Sprintf(`
 		MATCH (a {Lab_ID: $fromId}), (b {Lab_ID: $toId})
@@ -144,17 +137,21 @@ func shortestHopsQuery(maxHops int) string {
 	`, maxHops)
 }
 
-// maxBFSVisited caps how many nodes the *visualization* subgraph fetch
-// (subgraphRelationshipsQuery, below) will expand to. It is no longer what
-// decides whether two nodes are connected -- shortestHopsQuery answers that
-// cheaply and exactly, with no cap of its own. This constant only bounds how
-// much of the connection subgraph gets rendered once we already know a path
-// exists: if it's hit, Truncated is set and some legitimate edges near a
-// very well-connected endpoint may be missing from the picture, but the
-// reported Hops count and the yes/no answer are unaffected either way.
-const maxBFSVisited = 8000
+// maxShortestPaths bounds how many equally-short routes the visualization
+// query enumerates. A 5-hop path has 6 nodes, and consecutive shortest paths
+// overlap heavily, so this typically renders as a few dozen distinct nodes --
+// legible, and a hard ceiling on how much work Neo4j does per request. If it
+// is hit, Truncated is set: more routes of the same length exist.
+const maxShortestPaths = 60
 
-const defaultPathHops = 5
+// maxPathHops is the safety bound on the variable-length patterns below.
+// It is not a user-facing setting: Path Query answers "what is the shortest
+// connection between these two entities", so capping the search shorter than
+// the graph's own diameter would only manufacture false "not connected"
+// answers. In this graph 99.7% of phenotype pairs sit within 8 hops (and
+// 82.9% at exactly 5 -- Phenotype-Study-Module-Module-Study-Phenotype is the
+// structural minimum once Metabolite is excluded), so 10 is effectively "no
+// limit" while still keeping the pattern bounded.
 const maxPathHops = 10
 
 func (db *DB) lookupNodeName(ctx context.Context, label, id string) (string, bool, error) {
@@ -166,67 +163,6 @@ func (db *DB) lookupNodeName(ctx context.Context, label, id string) (string, boo
 		return "", false, nil
 	}
 	return asString(rows[0]["name"]), true, nil
-}
-
-// buildAdjacency turns a flat edge list into an undirected adjacency list
-// (every relationship in this schema is matched undirected elsewhere too).
-func buildAdjacency(edges []rawEdge) map[string][]string {
-	adj := make(map[string][]string, len(edges)*2)
-	for _, e := range edges {
-		adj[e.From] = append(adj[e.From], e.To)
-		adj[e.To] = append(adj[e.To], e.From)
-	}
-	return adj
-}
-
-// bfsLocal computes shortest hop distance from seedID to every node
-// reachable within maxHops, over an already-fetched in-memory adjacency
-// list -- a plain, ordinary BFS, safe to run in Go since it's operating on
-// a small, already-bounded edge set (at most maxBFSVisited nodes' worth of
-// relationships) rather than querying Neo4j.
-func bfsLocal(seedID string, adj map[string][]string, maxHops int) map[string]int {
-	dist := map[string]int{seedID: 0}
-	queue := []string{seedID}
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		if dist[cur] >= maxHops {
-			continue
-		}
-		for _, next := range adj[cur] {
-			if _, seen := dist[next]; seen {
-				continue
-			}
-			dist[next] = dist[cur] + 1
-			queue = append(queue, next)
-		}
-	}
-	return dist
-}
-
-// combinedDistance returns the length of the shortest known a-b walk that
-// passes directly through edge (u, v), trying both orientations since
-// every relationship in this schema is matched undirected. false means
-// neither orientation stays within maxHops using the two distance tables.
-func combinedDistance(u, v string, distA, distB map[string]int, maxHops int) (int, bool) {
-	best := -1
-	consider := func(x, y string) {
-		dx, ok1 := distA[x]
-		dy, ok2 := distB[y]
-		if !ok1 || !ok2 {
-			return
-		}
-		total := dx + 1 + dy
-		if total <= maxHops && (best == -1 || total < best) {
-			best = total
-		}
-	}
-	consider(u, v)
-	consider(v, u)
-	if best == -1 {
-		return 0, false
-	}
-	return best, true
 }
 
 // edgeWeight derives a 0-1 rendering weight for an edge from whatever
@@ -255,21 +191,14 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-// FindPathGraph resolves the connection subgraph between two nodes. It
-// fetches the complete induced subgraph within maxHops of fromID in one
-// APOC call, computes both endpoints' shortest distances locally over that
-// same fetched edge set (see bfsLocal), and keeps every edge that could sit
-// on some fromID<->toID walk no longer than maxHops.
-func (db *DB) FindPathGraph(ctx context.Context, fromLabel, fromID, toLabel, toID string, maxHops int) (*PathGraph, error) {
-	if maxHops < 1 {
-		maxHops = 1
-	}
-	// Keep path queries bounded even if callers bypass the frontend dropdown.
-	// 10 hops covers the structural Phenotype-Study-Module-...-Module-Study-
-	// Phenotype cases while keeping traversal and route enumeration tractable.
-	if maxHops > maxPathHops {
-		maxHops = maxPathHops
-	}
+// FindPathGraph resolves the connection subgraph between two nodes: it
+// settles connectivity and the exact hop count with one cheap bidirectional
+// shortestPath, then, if they are connected, fetches the relationships that
+// actually lie on shortest routes between them (see shortestPathEdgesQuery).
+// Every edge it returns is on a shortest path by construction -- there is no
+// local distance bookkeeping and no node-count cap to fall foul of.
+func (db *DB) FindPathGraph(ctx context.Context, fromLabel, fromID, toLabel, toID string) (*PathGraph, error) {
+	maxHops := maxPathHops
 
 	fromName, fromOK, err := db.lookupNodeName(ctx, fromLabel, fromID)
 	if err != nil {
@@ -311,90 +240,46 @@ func (db *DB) FindPathGraph(ctx context.Context, fromLabel, fromID, toLabel, toI
 		}, nil
 	}
 
-	rows, err := db.query(ctx, subgraphRelationshipsQuery, map[string]any{
-		"id":      fromID,
-		"maxHops": int64(maxHops),
-		"limit":   int64(maxBFSVisited),
+	rows, err := db.query(ctx, shortestPathEdgesQuery(maxHops), map[string]any{
+		"fromId":    fromID,
+		"toId":      toID,
+		"pathLimit": int64(maxShortestPaths),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	rawEdges := make([]rawEdge, 0, len(rows))
-	nodeCount := 0
+	edges := make([]PathGraphEdge, 0, len(rows))
+	touched := map[string]bool{fromID: true, toID: true}
+	pathCount := 0
 	for _, row := range rows {
 		props, _ := row["rel_props"].(map[string]any)
-		rawEdges = append(rawEdges, rawEdge{
+		e := PathGraphEdge{
 			From:  asString(row["from_id"]),
 			To:    asString(row["to_id"]),
 			Type:  asString(row["rel_type"]),
 			Props: props,
-		})
-		if nc := int(asInt64(row["nodeCount"])); nc > nodeCount {
-			nodeCount = nc
+			// Every edge here came out of allShortestPaths, so it is on a
+			// shortest route by construction.
+			OnShortestPath: true,
+		}
+		e.Weight = edgeWeight(e.Type, e.Props)
+		edges = append(edges, e)
+		touched[e.From] = true
+		touched[e.To] = true
+		if pc := int(asInt64(row["pathCount"])); pc > pathCount {
+			pathCount = pc
 		}
 	}
-	// subgraphAll's limit caps the induced subgraph at maxBFSVisited nodes;
-	// hitting that exactly is the signal that fromID's neighborhood is
-	// larger than what got explored, so the *visualization* may be missing
-	// some legitimate edges. It no longer means the connection itself is in
-	// doubt -- shortestHopsQuery above already settled that with an exact,
-	// uncapped answer, so a truncated fetch here just means "fewer edges
-	// drawn," never "path might not exist."
-	truncated := len(rawEdges) > 0 && nodeCount >= maxBFSVisited
 
-	adj := buildAdjacency(rawEdges)
-	distA := bfsLocal(fromID, adj, maxHops)
-	distB := bfsLocal(toID, adj, maxHops)
+	// More equally-short routes exist than we asked Neo4j to enumerate, so
+	// the picture is a representative sample rather than the complete set.
+	// The reported Hops is unaffected -- shortestHopsQuery settled that
+	// exactly, with no cap of its own.
+	truncated := pathCount >= maxShortestPaths
 
-	type candidateEdge struct {
-		edge           PathGraphEdge
-		total          int
-		onShortestPath bool
-	}
-	kept := make([]candidateEdge, 0, len(rawEdges))
-
-	for _, e := range rawEdges {
-		total, ok := combinedDistance(e.From, e.To, distA, distB, maxHops)
-		if !ok {
-			continue
-		}
-		onShortest := hops != nil && int64(total) == *hops
-		kept = append(kept, candidateEdge{
-			edge: PathGraphEdge{
-				From:   e.From,
-				To:     e.To,
-				Type:   e.Type,
-				Props:  e.Props,
-				Weight: edgeWeight(e.Type, e.Props),
-			},
-			total:          total,
-			onShortestPath: onShortest,
-		})
-	}
-
-	// True-shortest-path edges always come first, then highest weight, then
-	// shortest total distance. There is intentionally no final edge-count cap:
-	// the visualization should reflect the complete qualifying connection
-	// subgraph returned by the bounded traversal.
-	sort.Slice(kept, func(i, j int) bool {
-		if kept[i].onShortestPath != kept[j].onShortestPath {
-			return kept[i].onShortestPath
-		}
-		if kept[i].edge.Weight != kept[j].edge.Weight {
-			return kept[i].edge.Weight > kept[j].edge.Weight
-		}
-		return kept[i].total < kept[j].total
-	})
-
-	touched := map[string]bool{fromID: true, toID: true}
-	edges := make([]PathGraphEdge, 0, len(kept))
-	for _, ce := range kept {
-		ce.edge.OnShortestPath = ce.onShortestPath
-		edges = append(edges, ce.edge)
-		touched[ce.edge.From] = true
-		touched[ce.edge.To] = true
-	}
+	// Heaviest edges first, purely for rendering order.
+	sort.Slice(edges, func(i, j int) bool { return edges[i].Weight > edges[j].Weight })
 
 	otherIDs := make([]string, 0, len(touched))
 	for id := range touched {

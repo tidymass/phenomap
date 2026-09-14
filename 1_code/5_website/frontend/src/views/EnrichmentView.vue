@@ -49,17 +49,58 @@
             </div>
 
             <div class="me-field">
-              <span class="me-field-label">Method</span>
-              <div class="me-segmented">
+              <span class="me-field-label">Module confidence</span>
+              <div class="me-multi">
                 <button
-                  v-for="opt in methodOptions"
-                  :key="opt.value"
                   type="button"
-                  :class="{ active: method === opt.value }"
-                  @click="method = opt.value"
+                  class="me-multi-trigger"
+                  :class="{ open: openFilter === 'confidence', partial: !allConfidenceSelected }"
+                  @click.stop="toggleFilter('confidence')"
                 >
-                  {{ opt.label }}
+                  <span class="me-multi-summary">{{ confidenceSummary }}</span>
+                  <svg class="me-multi-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                 </button>
+                <div class="me-multi-panel" v-if="openFilter === 'confidence'" @click.stop>
+                  <div class="me-multi-actions">
+                    <button type="button" @click="selectAll('confidence')">Select all</button>
+                    <button type="button" @click="clearAll('confidence')">Clear</button>
+                  </div>
+                  <label class="me-multi-option" v-for="opt in confidenceOptions" :key="opt.value">
+                    <input type="checkbox" :value="opt.value" v-model="confidenceSelected" />
+                    <span class="me-multi-name">{{ opt.label }}</span>
+                    <span class="me-multi-count" v-if="opt.n !== null">{{ opt.n.toLocaleString() }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="me-field">
+              <span class="me-field-label">Module type</span>
+              <div class="me-multi">
+                <button
+                  type="button"
+                  class="me-multi-trigger"
+                  :class="{ open: openFilter === 'hypothesis', partial: !allTypesSelected }"
+                  @click.stop="toggleFilter('hypothesis')"
+                >
+                  <span class="me-multi-summary">{{ typeSummary }}</span>
+                  <svg class="me-multi-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="me-multi-panel" v-if="openFilter === 'hypothesis'" @click.stop>
+                  <div class="me-multi-actions">
+                    <button type="button" @click="selectAll('hypothesis')">Select all</button>
+                    <button type="button" @click="clearAll('hypothesis')">Clear</button>
+                  </div>
+                  <label class="me-multi-option" v-for="opt in hypothesisOptions" :key="opt.value">
+                    <input type="checkbox" :value="opt.value" v-model="hypothesisSelected" />
+                    <span class="me-multi-name">{{ opt.label }}</span>
+                    <span class="me-multi-count" v-if="opt.n !== null">{{ opt.n.toLocaleString() }}</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -88,10 +129,12 @@
               <input type="number" v-model.number="minOverlap" step="1" min="1" />
             </label>
 
-            <button class="me-submit" :disabled="loading || inputIdCount === 0" @click="run">
+            <button class="me-submit" :disabled="loading || inputIdCount === 0 || filtersEmpty" @click="run">
               <span v-if="loading" class="spinner" aria-hidden="true"></span>
-              {{ loading ? 'Running...' : 'Run enrichment' }}
+              {{ loading ? 'Running...' : 'Run' }}
             </button>
+
+            <p class="me-universe-hint" :class="{ warn: filtersEmpty }">{{ universeSummary }}</p>
           </div>
         </div>
       </div>
@@ -122,7 +165,7 @@
                 <span class="empty-step-num">2</span>
                 <div class="empty-step-copy">
                   <strong>Tune the test.</strong>
-                  <span>Choose Fisher's exact or hypergeometric, and set an FDR / min-overlap cutoff.</span>
+                  <span>Set an FDR / P-value cutoff and a minimum overlap.</span>
                 </div>
               </li>
               <li>
@@ -452,9 +495,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { runEnrichment } from '../api.js'
+import { fetchEnrichmentMeta, runEnrichment } from '../api.js'
 import AnimatedNetworkField from '../components/AnimatedNetworkField.vue'
 
 const route = useRoute()
@@ -470,10 +513,11 @@ const enrichmentCache = window.__phenomapEnrichmentCache || (window.__phenomapEn
 function persistState() {
   enrichmentCache.idsText = idsText.value
   enrichmentCache.idType = idType.value
-  enrichmentCache.method = method.value
   enrichmentCache.sigBasis = sigBasis.value
   enrichmentCache.sigCutoff = sigCutoff.value
   enrichmentCache.minOverlap = minOverlap.value
+  enrichmentCache.confidenceSelected = confidenceSelected.value.slice()
+  enrichmentCache.hypothesisSelected = hypothesisSelected.value.slice()
   enrichmentCache.result = result.value
   enrichmentCache.activeTab = activeTab.value
   enrichmentCache.page = page.value
@@ -485,10 +529,17 @@ function restoreState() {
   if (!enrichmentCache.result) return
   idsText.value = enrichmentCache.idsText ?? ''
   idType.value = enrichmentCache.idType ?? 'lab_id'
-  method.value = enrichmentCache.method ?? 'fisher'
   sigBasis.value = enrichmentCache.sigBasis ?? 'fdr'
   sigCutoff.value = enrichmentCache.sigCutoff ?? 0.05
   minOverlap.value = enrichmentCache.minOverlap ?? 2
+  if (Array.isArray(enrichmentCache.confidenceSelected)) {
+    confidenceSelected.value = enrichmentCache.confidenceSelected.slice()
+    filtersRestored = true
+  }
+  if (Array.isArray(enrichmentCache.hypothesisSelected)) {
+    hypothesisSelected.value = enrichmentCache.hypothesisSelected.slice()
+    filtersRestored = true
+  }
   result.value = enrichmentCache.result
   activeTab.value = enrichmentCache.activeTab ?? 'visual'
   page.value = enrichmentCache.page ?? 1
@@ -502,10 +553,6 @@ const idTypeOptions = [
   { value: 'kegg', label: 'KEGG' },
   { value: 'inchi', label: 'InChI' },
 ]
-const methodOptions = [
-  { value: 'fisher', label: "Fisher's exact" },
-  { value: 'hypergeometric', label: 'Hypergeometric' },
-]
 const sigBasisOptions = [
   { value: 'fdr', label: 'FDR' },
   { value: 'pvalue', label: 'P-value' },
@@ -513,10 +560,129 @@ const sigBasisOptions = [
 
 const idsText = ref('')
 const idType = ref('lab_id')
-const method = ref('fisher')
 const sigBasis = ref('fdr')
 const sigCutoff = ref(0.05)
 const minOverlap = ref(2)
+
+// ---------- module universe filters ----------
+// Restricting the universe is not cosmetic: the R side rebuilds the
+// BACKGROUND from whichever modules survive, so the null model matches what
+// is actually being tested (and the BH denominator shrinks with it). Both
+// lists start fully selected, which is exactly the old behaviour -- the
+// request omits the filter entirely when everything is checked.
+const CONFIDENCE_ORDER = ['high', 'medium', 'low']
+const FALLBACK_CONFIDENCE = ['high', 'medium', 'low']
+const FALLBACK_TYPES = [
+  'Host-Endogenous',
+  'Xenobiotic / Exogenous',
+  'Diet-Derived',
+  'Microbiome-Derived',
+  'Host\u2013Microbiome',
+]
+
+function titleCase(value) {
+  const v = String(value ?? '')
+  return v ? v.charAt(0).toUpperCase() + v.slice(1) : v
+}
+function asOption(value, n, label) {
+  return { value, label: label ?? value, n: Number.isFinite(Number(n)) ? Number(n) : null }
+}
+
+const confidenceOptions = ref(FALLBACK_CONFIDENCE.map((v) => asOption(v, null, titleCase(v))))
+const hypothesisOptions = ref(FALLBACK_TYPES.map((v) => asOption(v, null)))
+const confidenceSelected = ref(FALLBACK_CONFIDENCE.slice())
+const hypothesisSelected = ref(FALLBACK_TYPES.slice())
+const openFilter = ref('')
+let filtersRestored = false
+
+const allConfidenceSelected = computed(
+  () => confidenceSelected.value.length === confidenceOptions.value.length
+)
+const allTypesSelected = computed(
+  () => hypothesisSelected.value.length === hypothesisOptions.value.length
+)
+const filtersEmpty = computed(
+  () => confidenceSelected.value.length === 0 || hypothesisSelected.value.length === 0
+)
+
+function summarise(selected, options, allLabel) {
+  if (selected.length === 0) return 'None selected'
+  if (selected.length === options.length) return allLabel
+  if (selected.length <= 2) {
+    return selected
+      .map((v) => options.find((o) => o.value === v)?.label ?? v)
+      .join(', ')
+  }
+  return `${selected.length} of ${options.length} selected`
+}
+const confidenceSummary = computed(
+  () => summarise(confidenceSelected.value, confidenceOptions.value, 'All confidence')
+)
+const typeSummary = computed(
+  () => summarise(hypothesisSelected.value, hypothesisOptions.value, 'All types')
+)
+
+// Rough module count for the current selection, from the /meta counts. The
+// exact background size only comes back with the result (Background_N).
+const universeSummary = computed(() => {
+  if (filtersEmpty.value) return 'Select at least one confidence label and one module type.'
+  const known = (opts, sel) => opts.every((o) => o.n !== null) &&
+    opts.filter((o) => sel.includes(o.value)).reduce((a, o) => a + o.n, 0)
+  const byConf = known(confidenceOptions.value, confidenceSelected.value)
+  const byType = known(hypothesisOptions.value, hypothesisSelected.value)
+  if (byConf === false || byType === false) return ''
+  if (allConfidenceSelected.value && allTypesSelected.value) {
+    return `Testing all ${byConf.toLocaleString()} modules.`
+  }
+  // The two filters intersect, so the true count is at most the smaller side.
+  return `Testing at most ${Math.min(byConf, byType).toLocaleString()} modules -- the exact background size is reported with the result.`
+})
+
+function toggleFilter(key) {
+  openFilter.value = openFilter.value === key ? '' : key
+}
+function selectAll(key) {
+  if (key === 'confidence') confidenceSelected.value = confidenceOptions.value.map((o) => o.value)
+  else hypothesisSelected.value = hypothesisOptions.value.map((o) => o.value)
+}
+function clearAll(key) {
+  if (key === 'confidence') confidenceSelected.value = []
+  else hypothesisSelected.value = []
+}
+function onDocumentClick(event) {
+  if (!event.target.closest?.('.me-multi')) openFilter.value = ''
+}
+
+// plumber serialises scalars unboxed, but be tolerant of length-1 arrays.
+function scalar(x) {
+  return Array.isArray(x) ? x[0] : x
+}
+
+async function loadFilterMeta() {
+  try {
+    const meta = await fetchEnrichmentMeta()
+    const conf = (meta?.confidence_labels ?? [])
+      .map((e) => asOption(String(scalar(e.value)), scalar(e.n), titleCase(scalar(e.value))))
+      .filter((o) => o.value)
+    const types = (meta?.hypothesis_types ?? [])
+      .map((e) => asOption(String(scalar(e.value)), scalar(e.n)))
+      .filter((o) => o.value)
+    if (conf.length) {
+      conf.sort((a, b) => CONFIDENCE_ORDER.indexOf(a.value) - CONFIDENCE_ORDER.indexOf(b.value))
+      confidenceOptions.value = conf
+      if (!filtersRestored) confidenceSelected.value = conf.map((o) => o.value)
+      else confidenceSelected.value = confidenceSelected.value.filter((v) => conf.some((o) => o.value === v))
+    }
+    if (types.length) {
+      hypothesisOptions.value = types
+      if (!filtersRestored) hypothesisSelected.value = types.map((o) => o.value)
+      else hypothesisSelected.value = hypothesisSelected.value.filter((v) => types.some((o) => o.value === v))
+    }
+  } catch (e) {
+    // The form still works with the fallback lists; no need to shout.
+    console.warn('enrichment meta unavailable:', e.message)
+  }
+}
 
 const loading = ref(false)
 const error = ref('')
@@ -540,32 +706,57 @@ function isSignificant(row) {
 const enrichmentDemos = [
   {
     label: '#1',
-    title: 'Lab ID example: Nucleotide metabolism',
-    idType: 'lab_id',
-    ids: ['PME002024', 'PME005472', 'PME005806', 'PME006584', 'PME007707'],
-  },
-  {
-    label: '#2',
-    title: 'HMDB example: Drug and xenobiotic metabolism across multiple modules',
+    title:
+      'HMDB: purine catabolism plus dietary methylxanthines. The top hits separate into ' +
+      'Host-Endogenous "Purine metabolism" and Diet-Derived "Caffeine metabolism" modules ' +
+      '-- the same 10 compounds, two different origins.',
     idType: 'hmdb',
     ids: [
-      'HMDB0012517',
-      'HMDB0012518',
-      'HMDB0000399',
-      'HMDB0005087',
-      'HMDB0012868',
-      'HMDB0041796',
-      'HMDB0000030',
-      'HMDB0031342',
-      'HMDB0000792',
-      'HMDB0000893',
+      'HMDB0000157',
+      'HMDB0000292',
+      'HMDB0000289',
+      'HMDB0000195',
+      'HMDB0000050',
+      'HMDB0000133',
+      'HMDB0000462',
+      'HMDB0001847',
+      'HMDB0001889',
+      'HMDB0001860',
     ],
   },
   {
-    label: '#3',
-    title: 'KEGG example: Arginine and Proline Metabolism',
+    label: '#2',
+    title:
+      'KEGG: the primary and secondary bile acid pool. The strongest module is a ' +
+      'Host-Microbiome bile acid conjugation module -- gut bacteria deconjugate and ' +
+      'dehydroxylate what the liver secretes.',
     idType: 'kegg',
-    ids: ['C01879', 'C00327', 'C02427', 'C00025', 'C00065'],
+    ids: ['C00695', 'C04483', 'C02528', 'C01921', 'C03990', 'C07880', 'C05465'],
+  },
+  {
+    label: '#3',
+    title:
+      'HMDB: the tryptophan-kynurenine axis, from tryptophan through kynurenine and ' +
+      'its downstream neuroactive metabolites, against the serotonin branch.',
+    idType: 'hmdb',
+    ids: [
+      'HMDB0000929',
+      'HMDB0000684',
+      'HMDB0000715',
+      'HMDB0011631',
+      'HMDB0000232',
+      'HMDB0001123',
+      'HMDB0000259',
+      'HMDB0000881',
+    ],
+  },
+  {
+    label: '#4',
+    title:
+      'PhenoMAP Lab IDs: the three branched-chain amino acids together with their ' +
+      'branched-chain keto acids -- the classic insulin-resistance signature.',
+    idType: 'lab_id',
+    ids: ['PME006923', 'PME006920', 'PME006975', 'PME006790', 'PME004034', 'PME000363'],
   },
 ]
 
@@ -861,9 +1052,12 @@ async function run() {
     result.value = await runEnrichment({
       ids,
       id_type: idType.value,
-      method: method.value,
       fdr_cutoff: sigCutoff.value,
       min_overlap: minOverlap.value,
+      // Omitted entirely when everything is checked, so the default request
+      // is byte-identical to what it was before the filters existed.
+      ...(allConfidenceSelected.value ? {} : { confidence_labels: confidenceSelected.value }),
+      ...(allTypesSelected.value ? {} : { hypothesis_types: hypothesisSelected.value }),
     })
     persistState()
   } catch (e) {
@@ -875,6 +1069,12 @@ async function run() {
 
 onMounted(() => {
   restoreState()
+  loadFilterMeta()
+  document.addEventListener('click', onDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
 })
 </script>
 
@@ -894,7 +1094,12 @@ onMounted(() => {
 /* ---------- header + form band ---------- */
 .me-header {
   position: relative;
-  overflow: hidden;
+  /* The filter dropdowns open downward out of this band, so it must not
+     clip them -- the network backdrop below does its own clipping instead.
+     z-index puts the whole band (and anything overflowing it) above
+     .me-results, which comes later in the DOM. */
+  overflow: visible;
+  z-index: 2;
   background:
     radial-gradient(circle at 14% 20%, rgba(143, 215, 234, 0.24), transparent 28%),
     radial-gradient(circle at 86% 18%, rgba(79, 181, 155, 0.14), transparent 32%),
@@ -905,6 +1110,7 @@ onMounted(() => {
 .analysis-network-bg {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   opacity: 0.7;
   --network-line: rgba(210, 231, 244, 0.34);
   --network-node: rgba(216, 231, 239, 0.92);
@@ -1031,6 +1237,119 @@ onMounted(() => {
   color: #0f7c96;
   box-shadow: 0 1px 2px rgba(27, 33, 69, 0.08);
 }
+.me-multi {
+  position: relative;
+}
+.me-multi-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 178px;
+  padding: 8px 12px;
+  border: 1px solid #dfe3f0;
+  border-radius: 9px;
+  background: #f7f8fc;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b7280;
+  cursor: pointer;
+}
+.me-multi-trigger.partial {
+  color: #0f7c96;
+  border-color: #bfe0e8;
+  background: #fff;
+}
+.me-multi-trigger.open {
+  border-color: #0f7c96;
+  background: #fff;
+}
+.me-multi-caret {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.me-multi-trigger.open .me-multi-caret {
+  transform: rotate(180deg);
+}
+.me-multi-panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 300px;
+  padding: 6px;
+  border: 1px solid #dfe3f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgba(27, 33, 69, 0.14);
+}
+.me-multi-actions {
+  display: flex;
+  gap: 4px;
+  padding: 2px 2px 6px;
+  border-bottom: 1px solid #f0f1f6;
+  margin-bottom: 4px;
+}
+.me-multi-actions button {
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f7c96;
+  cursor: pointer;
+}
+.me-multi-actions button:hover {
+  background: #f0f8fa;
+}
+.me-multi-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.me-multi-option:hover {
+  background: #f7f8fc;
+}
+.me-multi-option input {
+  width: 15px;
+  height: 15px;
+  accent-color: #0f7c96;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.me-multi-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1b2145;
+  white-space: nowrap;
+}
+.me-multi-count {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9aa1c2;
+  font-variant-numeric: tabular-nums;
+}
+.me-universe-hint {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: #6b7280;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.me-universe-hint.warn {
+  color: #b3562c;
+  font-weight: 600;
+}
 .me-number-field input {
   width: 96px;
   padding: 8px 10px;
@@ -1048,7 +1367,11 @@ onMounted(() => {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  /* "Run" and "Running..." are very different widths -- pin a floor so the
+     button does not jump around when a query starts. */
+  min-width: 116px;
   padding: 12px 24px;
   border-radius: 10px;
   border: none;

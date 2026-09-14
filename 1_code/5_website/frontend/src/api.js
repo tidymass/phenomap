@@ -126,6 +126,14 @@ export function runEnrichment(payload) {
   return postJSON('/api/enrichment', payload)
 }
 
+// Filter vocabulary for the enrichment form -- which module confidence
+// labels and module types exist, and how many modules sit behind each.
+// Read from the R service's in-memory nodes_module.csv, so the chips can
+// never drift out of sync with the data.
+export function fetchEnrichmentMeta() {
+  return getJSON('/api/enrichment/meta')
+}
+
 // Submits the Contact page's "Send a Message" form; the backend relays it
 // by email to the PhenoMAP inbox with Reply-To set to the submitter.
 export function submitContact(payload) {
@@ -267,13 +275,12 @@ export async function postChat(message, history = [], llm = {}, opts = {}) {
 // connection subgraph between the two nodes (every node/edge that could sit
 // on some walk of length <= maxHops between them), not a ranked list of
 // individual paths. See backend/path.go for why.
-export function findPathGraph(from, to, maxHops = 5) {
+export function findPathGraph(from, to) {
   const params = new URLSearchParams({
     from_label: from.label,
     from_id: from.id,
     to_label: to.label,
     to_id: to.id,
-    max_hops: String(maxHops),
   })
   return getJSON(`/api/path?${params.toString()}`)
 }

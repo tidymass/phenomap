@@ -88,9 +88,9 @@
     "current_version": "v0.1.0-dev",
     "release_date": "2026-07-31",
     "graph_scope": [
-      { "label": "Studies", "value": "174" },
-      { "label": "Phenotypes", "value": "138" },
-      { "label": "Modules", "value": "2,438" },
+      { "label": "Studies", "value": "501" },
+      { "label": "Phenotypes", "value": "326" },
+      { "label": "Modules", "value": "12,929" },
       { "label": "Metabolites", "value": "9,730" }
     ],
     "release_notes": [

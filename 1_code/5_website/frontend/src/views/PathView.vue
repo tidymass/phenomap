@@ -30,6 +30,7 @@
               :key="demo.label"
               type="button"
               class="pq-example"
+              :title="demo.title"
               @click="applyDemo(demo)"
             >
               {{ demo.label }}
@@ -37,18 +38,6 @@
           </div>
 
           <div class="pq-form-controls">
-            <label class="pq-hops">
-              Within
-              <select
-                v-model.number="maxHops"
-                @change="clampHops"
-              >
-                <option v-for="hop in hopOptions" :key="hop" :value="hop">
-                  {{ hop }}
-                </option>
-              </select>
-              hops
-            </label>
             <button class="pq-submit" :disabled="!from || !to || loading" @click="search">
               {{ loading ? 'Searching...' : 'Find connections' }}
             </button>
@@ -72,12 +61,7 @@
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         <span>
-          No connection found within {{ maxHops }} hops.
-          <template v-if="graph.truncated">
-            One (or both) of these nodes has too large a neighborhood to fully check -- this search stopped early
-            rather than finish, so a connection may still exist that just wasn't reached. Picking a more specific
-            endpoint (e.g. a Module instead of a Phenotype or Study) usually narrows the search enough to complete.
-          </template>
+          No connection found between these two nodes.
         </span>
       </div>
 
@@ -321,10 +305,6 @@ const pathGraphCache =
 
 const from = ref(null)
 const to = ref(null)
-const defaultMaxHops = 5
-const maxSelectableHops = 10
-const hopOptions = Array.from({ length: maxSelectableHops }, (_, i) => i + 1)
-const maxHops = ref(defaultMaxHops)
 const graph = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -345,9 +325,9 @@ const graphTooltip = ref({
   color: '#3949ab',
 })
 
-function pathCacheKey(fromNode = from.value, toNode = to.value, hops = maxHops.value) {
+function pathCacheKey(fromNode = from.value, toNode = to.value) {
   if (!fromNode || !toNode) return ''
-  return [fromNode.label, fromNode.id, toNode.label, toNode.id, hops].join('|')
+  return [fromNode.label, fromNode.id, toNode.label, toNode.id].join('|')
 }
 
 function compactCache() {
@@ -364,7 +344,6 @@ function persistPathState({ replaceRoute = false } = {}) {
   pathGraphCache.set(key, {
     from: { ...from.value },
     to: { ...to.value },
-    maxHops: maxHops.value,
     graph: graph.value,
     searched: searched.value,
     activeTab: activeTab.value,
@@ -383,7 +362,6 @@ function persistPathState({ replaceRoute = false } = {}) {
       to_label: to.value.label,
       to_id: to.value.id,
       to_name: to.value.name || to.value.id,
-      max_hops: String(maxHops.value),
     },
   }).catch(() => {})
 }
@@ -411,13 +389,10 @@ function restorePathState() {
     id: String(q.to_id),
     name: String(q.to_name || q.to_id),
   }
-  const restoredHops = Number(q.max_hops || defaultMaxHops)
   from.value = restoredFrom
   to.value = restoredTo
-  maxHops.value = Number.isFinite(restoredHops) ? restoredHops : defaultMaxHops
-  clampHops()
 
-  const cached = pathGraphCache.get(pathCacheKey(restoredFrom, restoredTo, maxHops.value))
+  const cached = pathGraphCache.get(pathCacheKey(restoredFrom, restoredTo))
   if (!cached) return
   graph.value = cached.graph
   searched.value = cached.searched
@@ -429,44 +404,51 @@ function restorePathState() {
 const pathDemos = [
   {
     label: '#1',
-    hops: 5,
-    from: { label: 'Phenotype', id: 'PPH000216', name: 'Urinary bladder cancer' },
-    to: { label: 'Phenotype', id: 'PPH000098', name: 'Hepatocellular carcinoma' },
+    title:
+      'Adenoma-carcinoma sequence: which metabolic modules the precursor lesion and the ' +
+      'cancer already have in common.',
+    from: { label: 'Phenotype', id: 'PPH000068', name: 'Colorectal adenoma' },
+    to: { label: 'Phenotype', id: 'PPH000069', name: 'Colorectal cancer' },
   },
   {
     label: '#2',
-    hops: 3,
-    from: { label: 'Study', id: 'PST000252', name: 'ST003865' },
-    to: { label: 'Study', id: 'PST000271', name: 'ST004308' },
+    title:
+      'Cardiorenal syndrome: the shared metabolic backbone between failing kidneys and ' +
+      'coronary disease.',
+    from: { label: 'Phenotype', id: 'PPH000061', name: 'Chronic kidney disease' },
+    to: { label: 'Phenotype', id: 'PPH000073', name: 'Coronary Artery Disease' },
   },
   {
     label: '#3',
-    hops: 5,
-    from: { label: 'Phenotype', id: 'PPH000161', name: 'Pancreatic ductal adenocarcinoma' },
-    to: { label: 'Phenotype', id: 'PPH000027', name: 'Breast cancer' },
+    title:
+      'Metabolic-neurodegenerative crosstalk: what links Alzheimer disease to diabetes ' +
+      'at the level of reported metabolite modules.',
+    from: { label: 'Phenotype', id: 'PPH000019', name: 'Alzheimer disease' },
+    to: { label: 'Phenotype', id: 'PPH000089', name: 'Diabetes mellitus' },
   },
   {
     label: '#4',
-    hops: 3,
-    from: { label: 'Phenotype', id: 'PPH000213', name: 'Ulcerative colitis' },
-    to: { label: 'Module', id: 'PMO003724', name: 'Bacterial cell wall biosynthesis and shikimate pathway' },
+    title:
+      'Two independent studies, two diagnoses, two repositories: a colorectal cancer ' +
+      'study in Metabolomics Workbench and an ulcerative colitis study in MetaboLights, ' +
+      'joined only through module similarity.',
+    from: { label: 'Study', id: 'PST000258', name: 'ST003798' },
+    to: { label: 'Study', id: 'PST000104', name: 'MTBLS12531' },
+  },
+  {
+    label: '#5',
+    title:
+      'From a disease to one specific module: colorectal cancer reaches a high-confidence ' +
+      'glycerophospholipid and sphingolipid module that was first reported in a lung ' +
+      'cancer study.',
+    from: { label: 'Phenotype', id: 'PPH000069', name: 'Colorectal cancer' },
+    to: { label: 'Module', id: 'PMO005341', name: 'Glycerophospholipid and Sphingolipid Metabolism' },
   },
 ]
-
-// The UI exposes a dropdown, while the backend clamps independently so direct
-// API callers cannot request a wider traversal than the supported range.
-function clampHops() {
-  if (!Number.isFinite(maxHops.value)) {
-    maxHops.value = defaultMaxHops
-    return
-  }
-  maxHops.value = Math.min(maxSelectableHops, Math.max(1, Math.round(maxHops.value)))
-}
 
 function applyDemo(demo) {
   from.value = { ...demo.from }
   to.value = { ...demo.to }
-  maxHops.value = demo.hops
   graph.value = null
   error.value = ''
   searched.value = false
@@ -503,7 +485,6 @@ function clearEndpoint(which) {
 
 async function search() {
   if (!from.value || !to.value) return
-  clampHops()
   loading.value = true
   error.value = ''
   searched.value = true
@@ -511,7 +492,7 @@ async function search() {
   activeTab.value = 'visual'
   connectionPage.value = 1
   try {
-    graph.value = await findPathGraph(from.value, to.value, maxHops.value)
+    graph.value = await findPathGraph(from.value, to.value)
     persistPathState({ replaceRoute: true })
   } catch (e) {
     error.value = e.message
@@ -629,22 +610,20 @@ function edgeIdentity(e) {
 }
 
 // Reconstructs fromId->toId routes through the returned graph as ordered
-// sequences of (node, relationship) steps -- for the "Study A
-// --REPORTED_IN--> Module A --SIMILAR_TO--> Module B --REPORTED_IN-->
-// Study B" style chains in the Connections tab, not just the shortest one.
-// This runs in two stages rather than one general search so true shortest
-// routes are always found first and shown distinctly, while longer simple
-// routes are still enumerated completely within maxHops.
+// sequences of (node, relationship) steps -- the "Study A --REPORTED_IN-->
+// Module A --SIMILAR_TO--> Module B --REPORTED_IN--> Study B" chains in the
+// Connections tab.
 //
-// Stage 1, findShortestChains, is restricted to edges the backend already
-// flagged on_shortest_path and layered by BFS distance from fromId. Walking
-// it forward-only enumerates every true shortest route with no backtracking.
+// The backend now returns exactly the relationships that lie on a shortest
+// route (allShortestPaths), so every edge here is already flagged
+// on_shortest_path and there is nothing longer to enumerate. An earlier
+// second stage did a general DFS for simple routes longer than the shortest;
+// over a shortest-path-only edge set that can only produce detours that
+// wander out along one route and back along another, which are artifacts of
+// the union rather than real alternative connections -- so it is gone.
 //
-// Stage 2, findLongerChains, does general DFS backtracking over every edge,
-// restricted to simple routes strictly longer than the shortest and no
-// longer than maxHops. It intentionally has no route-count or step-count cap
-// so the Connections tab preserves scientific completeness for the returned
-// graph.
+// This walk is layered by BFS distance from fromId and moves forward only,
+// which enumerates every true shortest route with no backtracking.
 function findShortestChains(fromId, toId, edges) {
   const adj = new Map()
   for (const e of edges) {
@@ -690,48 +669,13 @@ function findShortestChains(fromId, toId, edges) {
   return chains
 }
 
-function findLongerChains(fromId, toId, edges, minLen, maxLen) {
-  const adj = new Map()
-  for (const e of edges) {
-    if (!adj.has(e.from)) adj.set(e.from, [])
-    if (!adj.has(e.to)) adj.set(e.to, [])
-    adj.get(e.from).push({ to: e.to, edge: e })
-    adj.get(e.to).push({ to: e.from, edge: e })
-  }
-
-  const chains = []
-  const visited = new Set([fromId])
-  const path = []
-
-  function dfs(node) {
-    if (node === toId) {
-      if (path.length > minLen) chains.push({ start: fromId, steps: [...path] })
-      return
-    }
-    if (path.length >= maxLen) return
-    for (const { to: next, edge } of adj.get(node) || []) {
-      if (visited.has(next)) continue
-      visited.add(next)
-      path.push({ node: next, edge, forward: edge.from === node })
-      dfs(next)
-      path.pop()
-      visited.delete(next)
-    }
-  }
-  dfs(fromId)
-  return chains
-}
-
 const pathChains = computed(() => {
   if (!graph.value || graph.value.hops == null) return { chains: [] }
   const fromId = from.value?.id
   const toId = to.value?.id
   if (!fromId || !toId || fromId === toId) return { chains: [] }
 
-  const shortest = findShortestChains(fromId, toId, graph.value.edges)
-  const longer = findLongerChains(fromId, toId, graph.value.edges, graph.value.hops, maxHops.value)
-
-  const chains = [...shortest, ...longer].sort((a, b) => a.steps.length - b.steps.length)
+  const chains = findShortestChains(fromId, toId, graph.value.edges)
   return { chains }
 })
 
@@ -789,11 +733,10 @@ function buildConnectionSubgraph(sourceGraph, chains) {
 
 const connectionSubgraph = computed(() => buildConnectionSubgraph(graph.value, pathChains.value.chains))
 
-// Lays out only the routes shown in the Connections tab. The backend may
-// return extra traversal context when maxHops is wider than the shortest
-// route; drawing that raw exploration graph makes the visible path appear
-// broken. Path Query is an endpoint-to-endpoint task, so the canvas mirrors
-// the actual connection paths and keeps them layered left-to-right.
+// Lays out only the routes shown in the Connections tab. Path Query is an
+// endpoint-to-endpoint task, so the canvas mirrors the actual connection
+// paths and keeps them layered left-to-right rather than drawing a raw
+// exploration graph around one endpoint.
 const layout = computed(() => {
   const visualGraph = connectionSubgraph.value
   if (!visualGraph.nodes?.length) return null
@@ -1105,28 +1048,6 @@ function nodeRoute(label, id) {
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid #eef0f7;
-}
-.pq-hops {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: #55607a;
-}
-.pq-hops select {
-  width: 72px;
-  padding: 8px 9px;
-  border-radius: 8px;
-  border: 1px solid #d7dbe0;
-  background: #ffffff;
-  font-size: 14.5px;
-  font-weight: 700;
-  color: #1b1f24;
-}
-.pq-hops select:focus {
-  outline: none;
-  border-color: #0f7c96;
 }
 .pq-submit {
   margin-left: auto;

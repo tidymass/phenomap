@@ -95,9 +95,8 @@
                 </svg>
               </span>
               <div class="stat-text">
-                <div class="stat-number">{{ s.display }}</div>
+                <div class="stat-number" :class="{ loading: !s.ready }">{{ s.display }}</div>
                 <div class="stat-label">{{ s.label }}</div>
-                <p>{{ s.description }}</p>
               </div>
             </div>
           </div>
@@ -112,7 +111,7 @@
         </button>
       </div>
 
-      <section id="analysis-tools" class="container-wide features-section">
+      <section id="analysis-tools" class="features-section">
         <h2 class="section-title">Analysis Tools</h2>
         <div class="feature-grid">
           <router-link to="/search" class="feature-card">
@@ -340,48 +339,72 @@ function watchGlobeVisibility() {
 // --- live stats strip ---
 const stats = ref(null)
 const statOrder = ['Metabolite', 'Module', 'Study', 'Phenotype']
-const statLabels = { Study: 'Studies', Phenotype: 'Phenotypes', Module: 'Modules', Metabolite: 'Metabolites' }
-const statDescriptions = {
-  Metabolite: 'Annotated compounds represented in the current graph',
-  Module: 'Dysregulated metabolic modules available for exploration',
-  Study: 'Public metabolomics studies curated into PhenoMAP',
-  Phenotype: 'Normalized phenotype contexts linked to study evidence',
+const statLabels = {
+  Study: 'Curated Studies',
+  Phenotype: 'Phenotype Terms',
+  Module: 'Functional Modules',
+  Metabolite: 'Metabolite Nodes',
 }
 
-// Counts animate up from 0 on every load instead of just appearing.
 const animatedCounts = reactive({ Study: 0, Phenotype: 0, Module: 0, Metabolite: 0 })
+const statsReady = ref(false)
+const statsFailed = ref(false)
+let countAnimationFrame = null
 
-function animateCount(key, target, duration = 1800) {
+function countsFromStats(payload) {
+  const counts = {}
+  statOrder.forEach((key) => {
+    const row = payload?.nodes?.find((n) => n.label === key)
+    if (row?.count !== undefined && row?.count !== null) counts[key] = Number(row.count) || 0
+  })
+  return counts
+}
+
+function animateCounts(targets, duration = 1200) {
+  if (countAnimationFrame) cancelAnimationFrame(countAnimationFrame)
+  const from = Object.fromEntries(statOrder.map((key) => [key, animatedCounts[key] || 0]))
   const start = performance.now()
+
   function step(now) {
     const t = Math.min((now - start) / duration, 1)
-    const eased = 1 - Math.pow(1 - t, 5) // ease-out quint: fast start, long slow crawl to the finish
-    animatedCounts[key] = Math.round(target * eased)
-    if (t < 1) requestAnimationFrame(step)
+    const eased = 1 - Math.pow(1 - t, 5)
+    statOrder.forEach((key) => {
+      const target = Number(targets[key] || 0)
+      animatedCounts[key] = Math.round(from[key] + (target - from[key]) * eased)
+    })
+    if (t < 1) {
+      countAnimationFrame = requestAnimationFrame(step)
+    } else {
+      statOrder.forEach((key) => {
+        animatedCounts[key] = Number(targets[key] || 0)
+      })
+      countAnimationFrame = null
+    }
   }
-  requestAnimationFrame(step)
+
+  countAnimationFrame = requestAnimationFrame(step)
 }
 
 const statCards = computed(() => {
   return statOrder.map((key) => {
-    const row = stats.value?.nodes?.find((n) => n.label === key)
     return {
       key,
       label: statLabels[key],
-      description: statDescriptions[key],
-      display: row ? animatedCounts[key].toLocaleString() : '—',
+      display: statsFailed.value ? '—' : statsReady.value ? animatedCounts[key].toLocaleString() : '0',
+      ready: statsReady.value || statsFailed.value,
     }
   })
 })
 
+const statsRequest = getStats()
+
 onMounted(async () => {
   try {
-    stats.value = await getStats()
-    statOrder.forEach((key) => {
-      const row = stats.value?.nodes?.find((n) => n.label === key)
-      if (row) animateCount(key, row.count)
-    })
+    stats.value = await statsRequest
+    statsReady.value = true
+    animateCounts(countsFromStats(stats.value))
   } catch (e) {
+    statsFailed.value = true
     // Homepage should still render fine without live counts.
   }
 })
@@ -390,6 +413,7 @@ onMounted(watchGlobeVisibility)
 
 onUnmounted(() => {
   if (globeObserver) globeObserver.disconnect()
+  if (countAnimationFrame) cancelAnimationFrame(countAnimationFrame)
 })
 </script>
 
@@ -397,6 +421,16 @@ onUnmounted(() => {
 .home {
   display: flex;
   flex-direction: column;
+
+  /* One shell for both card rows. The stats strip and the Analysis Tools
+     grid used to carry their own width, padding and gap (1480/28/18 vs
+     1280/24/44), so the four tool cards never lined up with the four stat
+     cards above them. Both now read these, at every breakpoint, which is
+     what keeps column edges matching. */
+  --card-shell-max: min(1480px, 96vw);
+  --card-shell-pad: 28px;
+  --card-cols: 4;
+  --card-gap: 28px;
 }
 .container {
   max-width: 1080px;
@@ -416,9 +450,9 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 .stats-container {
-  max-width: min(1480px, 96vw);
+  max-width: var(--card-shell-max);
   margin: 0 auto;
-  padding: 0 28px;
+  padding: 0 var(--card-shell-pad);
   width: 100%;
   box-sizing: border-box;
 }
@@ -695,16 +729,16 @@ onUnmounted(() => {
 
 /* ---------- release metrics ---------- */
 .stats-strip {
-  margin-top: 0;
+  margin-top: -18px;
   position: relative;
   z-index: 1;
-  padding: 34px 0 24px;
+  padding: 28px 0 24px;
   background: #f7f8fa;
 }
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
+  grid-template-columns: repeat(var(--card-cols), minmax(0, 1fr));
+  gap: var(--card-gap);
   justify-content: center;
   background: transparent;
   border-radius: 0;
@@ -715,18 +749,19 @@ onUnmounted(() => {
   margin-bottom: 64px;
 }
 .stat-card {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: 14px;
   min-width: 0;
-  min-height: 148px;
-  padding: 24px 26px;
+  min-height: 158px;
+  padding: 22px 24px 20px;
   border: 1px solid #d3e0ee;
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   box-shadow: 0 18px 34px -30px rgba(35, 74, 110, 0.38);
-  text-align: left;
+  text-align: center;
   transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 .stat-card:hover {
@@ -735,14 +770,13 @@ onUnmounted(() => {
   transform: translateY(-2px);
 }
 .stat-icon {
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  margin-bottom: 0;
   color: #fff;
   box-shadow: 0 16px 30px -20px rgba(17, 24, 60, 0.48);
   transition: transform 0.16s ease, box-shadow 0.16s ease;
@@ -752,8 +786,8 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 .stat-icon svg {
-  width: 28px;
-  height: 28px;
+  width: 31px;
+  height: 31px;
 }
 .stat-icon[data-label='Study'] { background: #3949ab; }
 .stat-icon[data-label='Phenotype'] { background: #b3562c; }
@@ -764,35 +798,51 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  text-align: left;
+  align-items: center;
+  text-align: center;
 }
 .stat-number {
-  font-size: clamp(30px, 2.5vw, 40px);
+  position: relative;
+  font-size: clamp(36px, 2.8vw, 48px);
   font-weight: 800;
   color: #1f5788;
   line-height: 1.05;
   letter-spacing: 0;
 }
+.stat-number.loading {
+  width: 4.4em;
+  max-width: 100%;
+  color: transparent;
+  overflow: hidden;
+}
+.stat-number.loading::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  width: 100%;
+  height: 0.8em;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #dbe5ef 0%, #eef4f8 48%, #dbe5ef 100%);
+  background-size: 200% 100%;
+  animation: stat-loading-sheen 1.05s ease-in-out infinite;
+}
+@keyframes stat-loading-sheen {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
 .stat-label {
-  margin-top: 6px;
-  font-size: 16px;
-  font-weight: 760;
+  margin-top: 8px;
+  font-size: 19px;
+  font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
-  color: #223247;
-}
-.stat-text p {
-  margin: 6px 0 0;
-  max-width: 230px;
-  color: #607086;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.45;
+  color: #72859b;
 }
 
 @media (max-width: 1100px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .home {
+    --card-cols: 2;
   }
 }
 
@@ -909,12 +959,16 @@ onUnmounted(() => {
 
 /* ---------- feature cards ---------- */
 .features-section {
+  max-width: var(--card-shell-max);
   margin: 76px auto 0;
+  padding: 0 var(--card-shell-pad);
+  width: 100%;
+  box-sizing: border-box;
 }
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 44px;
+  grid-template-columns: repeat(var(--card-cols), minmax(0, 1fr));
+  gap: var(--card-gap);
   margin-top: 34px;
 }
 .feature-card {
@@ -949,9 +1003,9 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px rgba(36, 72, 95, 0.08);
 }
 .tool-visual svg {
-  width: 42%;
-  min-width: 92px;
-  max-width: 126px;
+  width: 54%;
+  min-width: 112px;
+  max-width: 186px;
   height: auto;
 }
 .feature-card h3 {
@@ -979,7 +1033,6 @@ onUnmounted(() => {
     padding: 34px 0 44px;
   }
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
     gap: 14px;
   }
   .stat-card {
@@ -1041,6 +1094,9 @@ onUnmounted(() => {
     width: 26px;
     height: 26px;
   }
+  /* Phone is the one place the two rows deliberately differ: a stat card is
+     a number and a label and survives a half-width column, a tool card has
+     an illustration and a paragraph and does not. */
   .feature-grid {
     grid-template-columns: 1fr;
     gap: 28px;
@@ -1074,17 +1130,13 @@ onUnmounted(() => {
   .search-bar {
     min-height: 68px;
   }
-  .stats-container {
-    max-width: min(1720px, 96vw);
-  }
-  .stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .home {
+    --card-shell-max: min(1720px, 96vw);
+    --card-cols: 4;
+    --card-gap: 32px;
   }
   .container-wide {
     max-width: min(1480px, 92vw);
-  }
-  .feature-grid {
-    gap: 44px;
   }
   .schema-section-grid {
     grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
@@ -1105,14 +1157,11 @@ onUnmounted(() => {
   .search-panel {
     width: min(100%, 1060px);
   }
-  .stats-container {
-    max-width: min(1960px, 94vw);
+  .home {
+    --card-shell-max: min(1960px, 94vw);
   }
   .container-wide {
     max-width: min(1560px, 88vw);
-  }
-  .feature-grid {
-    gap: 48px;
   }
   .schema-section-grid {
     grid-template-columns: minmax(340px, 430px) minmax(760px, 980px);

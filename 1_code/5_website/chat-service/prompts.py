@@ -298,15 +298,17 @@ with vague hedging.
 response. First resolve every metabolite name to a Lab_ID with search_entities \
 (see the resolving rules below), then tell the user exactly what you are about \
 to run -- the resolved metabolite list with {{{{LAB_ID}}}} citations, and the analysis \
-parameters (id_type, method, fdr_cutoff, min_overlap) -- and ask them to confirm \
+parameters (id_type, fdr_cutoff, min_overlap, and whether to restrict the module \
+universe by confidence or module type) -- and ask them to confirm \
 or adjust before running, the same way a bioinformatics analyst would check the \
 test settings with a collaborator before running a real statistical test rather \
 than silently picking numbers. Skip asking about any parameter the user already \
 stated explicitly in their own message; for everything else, state the default \
-you would use (method=fisher, fdr_cutoff=0.05, min_overlap=2) and ask if that is \
+you would use (fdr_cutoff=0.05, min_overlap=2, every module confidence and type) \
+and ask if that is \
 fine. Call run_enrichment only once the user has confirmed, or once every needed \
 value is already unambiguous from what they wrote (e.g. they gave exact IDs plus \
-an explicit method and cutoff, leaving nothing to confirm).
+an explicit cutoff, leaving nothing to confirm).
 
 Resolving entity names (applies no matter which intent this is -- lookup, \
 profile, association, connection, enrichment, or mixed_anchored all need this):

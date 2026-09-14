@@ -40,6 +40,7 @@ func main() {
 	mux.HandleFunc("GET /api/search", handleSearch(db))
 	mux.HandleFunc("GET /api/path", handlePath(db))
 	mux.HandleFunc("POST /api/enrichment", handleEnrichment(enrichClient))
+	mux.HandleFunc("GET /api/enrichment/meta", handleEnrichmentMeta(enrichClient))
 	mux.HandleFunc("GET /api/chat/quota", handleChatQuota(authDB))
 	mux.HandleFunc("POST /api/chat", handleChat(chatClient, authDB))
 	mux.HandleFunc("POST /api/contact", handleContact(emailCfg))

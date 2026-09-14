@@ -15,9 +15,15 @@ import (
 type EnrichmentRequest struct {
 	IDs        []string `json:"ids"`
 	IDType     string   `json:"id_type"`
-	Method     string   `json:"method"`
 	FDRCutoff  float64  `json:"fdr_cutoff"`
 	MinOverlap float64  `json:"min_overlap"`
+
+	// Optional module-universe filters. Empty means "every module", which
+	// is the historical behaviour. When set, the R side also rebuilds the
+	// background from the surviving modules, so the null model matches
+	// what is actually being tested.
+	ConfidenceLabels []string `json:"confidence_labels,omitempty"`
+	HypothesisTypes  []string `json:"hypothesis_types,omitempty"`
 }
 
 // EnrichmentClient calls the R plumber service that wraps
@@ -58,6 +64,33 @@ func (c *EnrichmentClient) Run(ctx context.Context, req EnrichmentRequest) (json
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read enrichment response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("enrichment service returned %d: %s", resp.StatusCode, string(respBody))
+	}
+	return respBody, nil
+}
+
+// Meta returns the filter vocabulary the enrichment form needs: which
+// confidence labels and module types exist and how many modules sit behind
+// each. The R service answers it straight from its in-memory copy of
+// nodes_module.csv, so the UI never hardcodes a list that can drift from
+// the data.
+func (c *EnrichmentClient) Meta(ctx context.Context) (json.RawMessage, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/meta", nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	resp, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("call enrichment service (is it running on %s?): %w", c.baseURL, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read enrichment meta response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("enrichment service returned %d: %s", resp.StatusCode, string(respBody))

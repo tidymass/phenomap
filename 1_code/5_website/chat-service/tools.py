@@ -375,11 +375,18 @@ async def find_path(
     from_id: str,
     to_label: str,
     to_id: str,
-    max_hops: int = 5,
+    # Tolerated and ignored: max_hops was a real parameter until Path Query
+    # became "shortest path, full stop". A model working from a stale tool
+    # description (or a resumed conversation) can still send it; swallowing
+    # it here beats _run_manual_tool turning it into a TypeError the model
+    # then has to recover from.
+    **_ignored,
 ) -> dict:
-    """Whether/how two entities are connected in the graph, within max_hops.
-    Resolve both endpoints with search_entities first if you only have
-    names."""
+    """Whether and how two entities are connected in the graph, via the
+    shortest path(s) between them. There is no hop budget to set: the
+    endpoint always reports the true shortest distance, or that the two are
+    not connected at all. Resolve both endpoints with search_entities first
+    if you only have names."""
     for lbl in (from_label, to_label):
         if lbl not in ALLOWED_LABELS:
             return {"error": f"unknown label '{lbl}'. {_LABEL_HINT}"}
@@ -388,18 +395,16 @@ async def find_path(
         "from_id": from_id,
         "to_label": to_label,
         "to_id": to_id,
-        "max_hops": max(1, min(int(max_hops), 10)),
     }
     data = await _get(client, "/api/path", params=params)
     nodes = data.get("nodes", []) or []
     edges = data.get("edges", []) or []
-    # The backend's induced subgraph can hold up to maxBFSVisited (4000)
-    # nodes for a well-connected pair, but only the first 40 ever go into
-    # nodes_sample below -- remembering all of `nodes` here (the old
-    # behavior) put every one of those un-shown nodes into `citations`
-    # anyway, the same "cited but never actually shown to the model" bug as
-    # get_node_detail's neighbor loops. Only remember the slice that's
-    # actually returned to the model.
+    # The backend returns the union of the shortest routes, which is small,
+    # but only the first 40 nodes ever go into nodes_sample below --
+    # remembering all of `nodes` here (the old behavior) put every un-shown
+    # node into `citations` anyway, the same "cited but never actually shown
+    # to the model" bug as get_node_detail's neighbor loops. Only remember
+    # the slice that's actually returned to the model.
     nodes_sample = nodes[:40]
     for node in nodes_sample:
         _remember(citations, node.get("label"), node.get("id"), node.get("name"))
@@ -411,7 +416,11 @@ async def find_path(
 
     return {
         "connected": data.get("hops") is not None,
+        # Length of the shortest connection. Everything returned lies on a
+        # shortest route -- there are no longer/alternative routes here.
         "hops": data.get("hops"),
+        # True when the pair has more equally-short routes than the backend
+        # draws; it never casts doubt on `connected` or `hops`.
         "truncated": data.get("truncated", False),
         "node_count": len(nodes),
         "edge_count": len(edges),
@@ -439,14 +448,27 @@ async def run_enrichment(
     citations,
     ids: list,
     id_type: str = "hmdb",
-    method: str = "fisher",
     fdr_cutoff: float = 0.05,
     min_overlap: float = 2,
     top_n: int = 15,
+    confidence_labels: list | None = None,
+    hypothesis_types: list | None = None,
+    # Tolerated and ignored: `method` used to select fisher vs hypergeometric.
+    # They are the same one-sided test, so the option is gone; accept it
+    # quietly rather than erroring on a stale call.
+    **_ignored,
 ) -> dict:
     """Module enrichment test: given a list of metabolite IDs, which
     PhenoMAP modules are they statistically enriched in. id_type is one of
-    lab_id, hmdb, kegg, inchi."""
+    lab_id, hmdb, kegg, inchi.
+
+    One-sided hypergeometric / Fisher's exact test (they are the same test),
+    BH-adjusted over the modules that actually had a non-zero overlap.
+
+    confidence_labels and hypothesis_types optionally restrict the module
+    universe. This is not cosmetic filtering: the background metabolite set
+    is rebuilt from whatever modules survive, so the null model matches what
+    is being tested. Leave them unset to test every module."""
     if not ids:
         return {"error": "ids must be a non-empty list of metabolite IDs"}
     if id_type not in {"lab_id", "hmdb", "kegg", "inchi"}:
@@ -466,10 +488,13 @@ async def run_enrichment(
     body = {
         "ids": ids,
         "id_type": id_type,
-        "method": method if method in {"fisher", "hypergeometric"} else "fisher",
         "fdr_cutoff": fdr_cutoff,
         "min_overlap": min_overlap,
     }
+    if confidence_labels:
+        body["confidence_labels"] = [str(c) for c in confidence_labels]
+    if hypothesis_types:
+        body["hypothesis_types"] = [str(h) for h in hypothesis_types]
     data = await _post(client, "/api/enrichment", body)
     rows = data.get("enrichment", []) or []
     sig_rows = [r for r in rows if r.get("Significant")]
@@ -478,8 +503,18 @@ async def run_enrichment(
     for r in top_rows:
         _remember(citations, "Module", r.get("Module_ID"), r.get("title"))
 
+    params = data.get("parameters", {}) or {}
     matched_input_n = len(data.get("matched_input", []) or [])
     result = {
+        # What was actually tested, so the answer can state it rather than
+        # implying the whole graph was searched.
+        "test": {
+            "modules_in_universe": params.get("module_n"),
+            "modules_tested": params.get("tested_module_n"),
+            "background_metabolites": params.get("background_n"),
+            "confidence_labels": params.get("confidence_labels"),
+            "hypothesis_types": params.get("hypothesis_types"),
+        },
         "matched_input_n": matched_input_n,
         "unmatched_input_ids": [u.get("Input_ID") for u in (data.get("unmatched_input", []) or [])],
         "significant_module_count": len(sig_rows),
@@ -644,9 +679,11 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "find_path",
             "description": (
-                "Check whether/how two entities are connected in the PhenoMAP graph, and "
-                "summarize the connecting subgraph within max_hops. Resolve both endpoints "
-                "to exact Lab_IDs with search_entities first."
+                "Check whether and how two entities are connected in the PhenoMAP graph, and "
+                "summarize the shortest connection between them. There is no hop setting: the "
+                "tool always returns the true shortest distance, or reports that the two are "
+                "not connected. Resolve both endpoints to exact Lab_IDs with search_entities "
+                "first."
             ),
             "parameters": {
                 "type": "object",
@@ -655,7 +692,6 @@ TOOL_SCHEMAS = [
                     "from_id": {"type": "string"},
                     "to_label": {"type": "string", "enum": ["Study", "Phenotype", "Module", "Metabolite"]},
                     "to_id": {"type": "string"},
-                    "max_hops": {"type": "integer", "description": "1-10, default 5."},
                 },
                 "required": ["from_label", "from_id", "to_label", "to_id"],
             },
@@ -667,9 +703,12 @@ TOOL_SCHEMAS = [
             "name": "run_enrichment",
             "description": (
                 "Module enrichment test: given a list of metabolite IDs, find which "
-                "PhenoMAP modules they are statistically enriched in (Fisher's exact or "
-                "hypergeometric test, BH-adjusted FDR). Use this for 'which modules are "
-                "associated with metabolites X, Y, Z' style questions."
+                "PhenoMAP modules they are statistically enriched in (one-sided "
+                "hypergeometric / Fisher's exact test -- the same test -- with BH-adjusted "
+                "FDR over the modules that had a non-zero overlap). Use this for 'which "
+                "modules are associated with metabolites X, Y, Z' style questions. The "
+                "module universe can be narrowed by confidence and by module type; the "
+                "background is rebuilt to match whatever is selected."
             ),
             "parameters": {
                 "type": "object",
@@ -684,9 +723,25 @@ TOOL_SCHEMAS = [
                         "enum": ["lab_id", "hmdb", "kegg", "inchi"],
                         "description": "Default hmdb.",
                     },
-                    "method": {"type": "string", "enum": ["fisher", "hypergeometric"], "description": "Default fisher."},
                     "fdr_cutoff": {"type": "number", "description": "Default 0.05."},
                     "min_overlap": {"type": "number", "description": "Minimum overlap count, default 2."},
+                    "confidence_labels": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["high", "medium", "low"]},
+                        "description": (
+                            "Optional. Restrict the module universe to these confidence levels "
+                            "(high 1,090 / medium 4,708 / low 7,131 modules). Omit to test all."
+                        ),
+                    },
+                    "hypothesis_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional. Restrict the module universe to these module types: "
+                            "'Host-Endogenous', 'Xenobiotic / Exogenous', 'Diet-Derived', "
+                            "'Microbiome-Derived', 'Host\u2013Microbiome'. Omit to test all."
+                        ),
+                    },
                 },
                 "required": ["ids"],
             },

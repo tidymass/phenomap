@@ -60,7 +60,18 @@
                 <li v-for="(point, i) in section.points" :key="i"><template v-for="part in renderParts(point)" :key="part.key"><a v-if="part.href" :href="part.href" target="_blank" rel="noreferrer">{{ part.text }}</a><template v-else>{{ part.text }}</template></template></li>
               </ul>
             </div>
-            <div v-if="section.visual" class="screenshot-slot">
+            <figure
+              v-if="section.image && !failedImages.has(section.image)"
+              class="screenshot-shot"
+            >
+              <img
+                :src="section.image"
+                :alt="section.visual || section.heading"
+                loading="lazy"
+                @error="failedImages.add(section.image)"
+              />
+            </figure>
+            <div v-else-if="section.visual" class="screenshot-slot">
               <div class="slot-topbar">
                 <span></span>
                 <span></span>
@@ -125,10 +136,17 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+
+// A tutorial section shows its real screenshot when one is present under
+// frontend/public/help/. Until that file exists the dev server answers with
+// the SPA index.html, which fails to decode as an image -- so a failed load
+// falls back to the placeholder box instead of a broken-image icon, and the
+// page looks finished either way.
+const failedImages = ref(new Set())
 
 function renderParts(value) {
   if (!Array.isArray(value)) return [{ key: 'text-0', text: value }]
@@ -151,7 +169,6 @@ const tools = [
         step: '02',
         heading: 'Choose the entity type first',
         body: 'Start by selecting the entity type. This tells PhenoMAP which group of records to search and which fields to match. Names and titles use prefix-style full-text search, so partial multi-word queries can work. ID fields use contains matching, and ID matches are shown before ordinary name or title matches.',
-        visual: 'Screenshot placeholder: home search type selector',
         points: [
           'Study searches Title, Accession, and PhenoMAP Lab_ID.',
           'Phenotype searches Phenotype, OLS_ID, and PhenoMAP Lab_ID.',
@@ -163,13 +180,13 @@ const tools = [
         step: '03',
         heading: 'Run a search from the home page',
         body: 'On the home page, choose the type on the left side of the search box, enter at least two characters, and submit the search. The example links under the search box are shortcuts: clicking one opens the full Entity Search page with that type and query already filled in.',
-        visual: 'Screenshot placeholder: query entered in the homepage search bar',
       },
       {
         step: '04',
         heading: 'Browse and refine results',
         body: 'The Entity Search page shows a paginated table. Each row includes the entity type, PhenoMAP ID, title, and one or two type-specific detail columns, such as Accession, Hypothesis Type, OLS ID, HMDB ID, or KEGG ID.',
-        visual: 'Screenshot placeholder: Entity Search results table',
+        visual: 'Entity Search: the results list with entity-type filtering',
+        image: '/help/entity-search-results.png',
         points: [
           'An empty query browses all entities of the selected type.',
           'One-character queries are ignored until more text is entered.',
@@ -180,7 +197,8 @@ const tools = [
         step: '05',
         heading: 'Open an entity detail page',
         body: 'Click a result row to open its detail page. Detail pages show the selected record, important properties, and related records grouped by relationship type. For example, a phenotype can lead to related studies and modules, while a module can show pathway coverage, phenotype relationship, PubMed evidence, member metabolites, and similar modules.',
-        visual: 'Screenshot placeholder: entity detail page with relationships',
+        visual: 'An entity detail page with its relationship sections',
+        image: '/help/entity-search-detail.png',
       },
       {
         step: '06',
@@ -198,51 +216,43 @@ const tools = [
       {
         step: '01',
         heading: 'What Path Query is for',
-        body: 'Path Query shows how two selected records are connected in the PhenoMAP graph. It is best for tracing connections among phenotypes, studies, and modules, such as phenotype-to-module, study-to-module, or phenotype-to-phenotype routes.',
+        body: 'Path Query shows how two selected records are connected in the PhenoMAP graph. It always returns the shortest connection between them, so there is nothing to configure beyond the two endpoints. It is best for tracing connections among phenotypes, studies, and modules, such as phenotype-to-module, study-to-module, or phenotype-to-phenotype routes.',
       },
       {
         step: '02',
         heading: 'Choose the two endpoints',
         body: 'Select a source record and a target record with the two node pickers. The picker uses the same Entity Search logic, so you can search by name, title, accession, database ID, or PhenoMAP ID before choosing the exact node.',
-        visual: 'Screenshot placeholder: source and target node pickers',
+        visual: 'Path Query: the source and target node pickers with the Find connections button',
+        image: '/help/path-query-form.png',
         points: [
           'Use Study, Phenotype, or Module endpoints for the clearest paths.',
-          'Metabolite records can be selected in the picker, but Path Query currently excludes metabolites from the traversal to keep the graph readable.',
+          'Metabolite records can be selected in the picker, but Path Query excludes metabolites from the traversal to keep the graph readable.',
           'Confirm the entity type and PhenoMAP ID before running the query so the route starts and ends on the intended records.',
+          'There is no hop setting: once both endpoints are chosen, select Find connections.',
         ],
       },
       {
         step: '03',
-        heading: 'Set the maximum hop range',
-        body: 'The hop range controls how many relationship steps Path Query can use between the two endpoints. The default is 5 hops, and the page lets you choose up to 10. A smaller range gives a stricter result; a larger range can find indirect connections.',
-        visual: 'Screenshot placeholder: max hop selector',
+        heading: 'Read the visualization',
+        body: 'After the query runs, the visualization shows the shortest connection between the endpoints, and the header reports how many hops that is. Every edge drawn lies on a shortest route; node colors show entity types.',
+        visual: 'Path Query: the network visualization of the shortest connection',
+        image: '/help/path-query-graph.png',
         points: [
-          'Start with fewer hops when both endpoints are specific.',
-          'Increase the hop count if no connection is found.',
-          'If the query touches a very large neighborhood, the backend may mark the result as truncated.',
+          'Hover a node or edge to inspect its label and relationship type.',
+          'Use edge thickness as a visual cue for relationship strength when a similarity score is available.',
+          'Click a node to open its entity detail page.',
+          'Two phenotypes are usually five hops apart, because the shortest route between them runs phenotype to study to module to a similar module to study to phenotype.',
         ],
       },
       {
         step: '04',
-        heading: 'Read the visualization',
-        body: 'After the query runs, the visualization shows the connection subgraph between the endpoints. It keeps edges that can sit on a route within the selected hop range, highlights shortest-path edges, and uses node colors to show entity types.',
-        visual: 'Screenshot placeholder: Path Query network visualization',
-        points: [
-          'Hover a node or edge to inspect its label and relationship type.',
-          'Use edge thickness as a visual cue for relationship strength when a score is available.',
-          'Click a node to open its entity detail page.',
-        ],
+        heading: 'Compare connection paths',
+        body: 'The Connections tab lists every shortest route in a linear form. Use it when the network view is dense or when you want to read the exact order of records and relationship labels from the source to the target.',
       },
       {
         step: '05',
-        heading: 'Compare connection paths',
-        body: 'The Connections tab lists routes in a linear form. Use it when the network view is dense or when you want to read the exact order of records and relationship labels from the source to the target.',
-        visual: 'Screenshot placeholder: Connections tab with route list',
-      },
-      {
-        step: '06',
-        heading: 'How to refine difficult queries',
-        body: 'If Path Query returns no connection, increase the hop range or choose endpoints that are more directly related. If the graph is too dense, reduce the hop range or use a more specific study or module instead of a broad phenotype. For metabolite-centered exploration, open the metabolite detail page rather than relying on Path Query.',
+        heading: 'How to read difficult results',
+        body: 'If Path Query reports no connection, the two records genuinely have no route through the curated study, phenotype, and module backbone; choosing endpoints that are more closely related usually helps. If the result is marked as truncated, the two endpoints have more equally short routes than the page draws, so the picture is a representative sample; the reported hop count is still exact. For metabolite-centered exploration, open the metabolite detail page instead, since Path Query deliberately keeps metabolites out of the traversal.',
       },
     ],
   },
@@ -261,7 +271,8 @@ const tools = [
         step: '02',
         heading: 'Paste your metabolite identifiers',
         body: 'Paste your metabolite IDs into the input box. The page accepts one ID per line, or IDs separated by commas, spaces, or semicolons. Example buttons can fill in sample inputs if you want to test the workflow first.',
-        visual: 'Screenshot placeholder: metabolite ID input area',
+        visual: 'Module Enrichment: the metabolite ID box, ID type, module filters and Run button',
+        image: '/help/enrichment-form.png',
         points: [
           'Lab ID works best when your input already uses PhenoMAP metabolite IDs.',
           'HMDB and KEGG are useful for common metabolomics annotation outputs.',
@@ -272,7 +283,6 @@ const tools = [
         step: '03',
         heading: 'Choose the identifier type',
         body: 'Choose the ID type that matches the identifiers you pasted. The enrichment service maps your input to PhenoMAP metabolites using the selected field before it calculates overlap with modules.',
-        visual: 'Screenshot placeholder: ID type selector',
         points: [
           'Choose Lab ID for IDs such as PME002024.',
           'Choose HMDB for IDs such as HMDB0000122.',
@@ -282,12 +292,13 @@ const tools = [
       },
       {
         step: '04',
-        heading: 'Set the test and filters',
-        body: 'Choose Fisher’s exact test or the hypergeometric test, then set the cutoff and minimum overlap. The enrichment service returns both p-value and FDR; the page can filter the visible results by either FDR or raw p-value.',
-        visual: 'Screenshot placeholder: enrichment controls',
+        heading: 'Choose the module universe and cutoffs',
+        body: 'PhenoMAP uses a one-sided hypergeometric test, which is mathematically the same as a one-sided Fisher’s exact test, and corrects for multiple testing with Benjamini-Hochberg across the modules that actually share at least one metabolite with your list. Module confidence and Module type let you narrow which modules are tested; the background metabolite set is rebuilt from whatever you select, so the null model always matches what is being tested.',
         points: [
-          'Fisher’s exact test is the default.',
-          'FDR is usually the safer significance basis because many modules are tested at once.',
+          'Both filters start with everything selected, which tests all 12,929 modules against a background of 6,631 metabolites.',
+          'Module confidence is high (1,090 modules), medium (4,708), or low (7,131).',
+          'Module type is Host-Endogenous, Xenobiotic / Exogenous, Diet-Derived, Microbiome-Derived, or Host–Microbiome.',
+          'Significance basis switches the visible results between FDR and raw p-value; both values are returned for every module, so switching does not re-run the test.',
           'Minimum overlap removes modules supported by too few shared metabolites.',
         ],
       },
@@ -295,7 +306,8 @@ const tools = [
         step: '05',
         heading: 'Read the enrichment overview',
         body: 'The overview plot summarizes the returned modules. Each point is one module. The x-axis reflects enrichment ratio, the y-axis reflects FDR significance, and point size reflects the number of overlapping metabolites.',
-        visual: 'Screenshot placeholder: enrichment bubble plot',
+        visual: 'Module Enrichment: the bubble plot and the significant module table',
+        image: '/help/enrichment-results.png',
         points: [
           'Points farther right have higher enrichment ratio.',
           'Points higher on the plot have smaller FDR values.',
@@ -306,7 +318,6 @@ const tools = [
         step: '06',
         heading: 'Review significant modules',
         body: 'The table lists modules that pass the current significance basis, cutoff, and minimum overlap. Use it to compare module titles, confidence labels, overlapped metabolites, enrichment ratios, p-values, and FDR values.',
-        visual: 'Screenshot placeholder: significant modules table',
       },
       {
         step: '07',
@@ -325,7 +336,6 @@ const tools = [
         step: '01',
         heading: 'What PhenoMAP Chat is for',
         body: 'PhenoMAP Chat lets you ask natural-language questions about PhenoMAP data. Behind the scenes, the chat service can call the same graph tools used by the website, including Entity Search, node detail lookup, Path Query, and Module Enrichment.',
-        visual: 'Screenshot placeholder: PhenoMAP Chat main screen',
         points: [
           'Use it for lookup, connection, association, and enrichment-style questions.',
           'Ask focused questions that name the phenotype, study, module, metabolite, or ID you care about.',
@@ -336,7 +346,6 @@ const tools = [
         step: '02',
         heading: 'Choose model settings',
         body: 'Open the model settings panel from the account area in the chat sidebar. You can use the official free channel when quota is available, or provide your own OpenAI-compatible provider settings for ChatGPT API or SiliconFlow.',
-        visual: 'Screenshot placeholder: model settings panel',
         points: [
           'Official free shows the remaining daily quota and does not require your own API key.',
           'ChatGPT API requires your own API key and model name.',
@@ -348,7 +357,6 @@ const tools = [
         step: '03',
         heading: 'Start or resume a chat',
         body: 'Use New chat to start a clean conversation, or select a previous chat from the sidebar. Chat history is organized by conversation, so you can keep separate analysis questions in separate threads.',
-        visual: 'Screenshot placeholder: chat history and New chat button',
         points: [
           'Starter prompts are available on an empty chat screen.',
           'You can delete old chats from the sidebar.',
@@ -359,7 +367,6 @@ const tools = [
         step: '04',
         heading: 'Ask a focused question',
         body: 'Type your question into the composer and send it. The best prompts include the record name or ID and the kind of answer you want, such as related modules, member metabolites, supporting studies, a connection path, or an enrichment result.',
-        visual: 'Screenshot placeholder: message composer and starter prompts',
         points: [
           'Good: “Which modules are associated with acute myeloid leukemia?”',
           'Good: “Where does HMDB0000289 appear in PhenoMAP?”',
@@ -370,7 +377,6 @@ const tools = [
         step: '05',
         heading: 'Watch progress and stop if needed',
         body: 'While the assistant works, the page can show short progress messages as the backend classifies the request and calls graph tools. If a response is taking too long or you sent the wrong prompt, use the stop button in the composer.',
-        visual: 'Screenshot placeholder: streaming answer and stop button',
         points: [
           'The answer streams into the chat as it is generated.',
           'Stopped messages remain in the conversation so you can revise and try again.',
@@ -381,7 +387,8 @@ const tools = [
         step: '06',
         heading: 'Check evidence and citations',
         body: 'PhenoMAP Chat answers are designed to cite graph records it retrieved. Citation tokens and evidence panels help you inspect where an answer came from. Open cited entity pages before using results in a report, figure, or downstream analysis.',
-        visual: 'Screenshot placeholder: cited answer and evidence panel',
+        visual: 'PhenoMAP Chat: an answer with its citations and evidence panel',
+        image: '/help/chat-answer.png',
         points: [
           'Click cited records to inspect the underlying entity detail page.',
           'Open the evidence panel to see which tools were used.',
@@ -668,6 +675,18 @@ const nextTopic = computed(() =>
   width: min(100%, 620px);
   min-height: 160px;
   margin: 20px auto 0;
+}
+.screenshot-shot {
+  width: min(100%, 620px);
+  margin: 20px auto 0;
+}
+.screenshot-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid #e3e8ef;
+  border-radius: 10px;
+  box-shadow: 0 14px 34px -26px rgba(4, 7, 20, 0.7);
 }
 .slot-topbar {
   display: none;
