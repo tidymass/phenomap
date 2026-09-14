@@ -264,12 +264,7 @@
             <div class="study-module-groups">
               <section class="study-module-group" v-for="group in studyModuleGroups" :key="group.key">
                 <div class="study-module-group-head">
-                  <div>
-                    <h3>{{ group.label }}</h3>
-                    <div class="study-module-meta" v-if="group.meta.length">
-                      <span v-for="item in group.meta" :key="item.label">{{ item.label }}: {{ item.value }}</span>
-                    </div>
-                  </div>
+                  <h3>{{ group.label }}</h3>
                   <span class="count">{{ group.items.length }}</span>
                 </div>
 
@@ -1229,20 +1224,6 @@ function cleanStudyModuleValue(value) {
   return out
 }
 
-function studyModuleGroupMeta(module) {
-  const pairs = [
-    ['Case', module.case_value],
-    ['Control', module.control_value],
-    ['N case', module.n_case],
-    ['N control', module.n_control],
-    ['Design', module.comparison_design_type],
-    ['Scope', module.result_scope],
-  ]
-  return pairs
-    .map(([label, value]) => ({ label, value: cleanStudyModuleValue(value) }))
-    .filter((item) => item.value)
-}
-
 const studyModuleGroups = computed(() => {
   if (!studyModules.value.length) return []
   const groups = new Map()
@@ -1252,7 +1233,6 @@ const studyModuleGroups = computed(() => {
       groups.set(label, {
         key: label,
         label,
-        metaSource: module,
         items: [],
       })
     }
@@ -1262,7 +1242,6 @@ const studyModuleGroups = computed(() => {
   return [...groups.values()]
     .map((group) => ({
       ...group,
-      meta: studyModuleGroupMeta(group.metaSource),
       items: group.items.slice().sort((a, b) => {
         const aName = cleanStudyModuleValue(a.module_title) || cleanStudyModuleValue(a.module_id)
         const bName = cleanStudyModuleValue(b.module_title) || cleanStudyModuleValue(b.module_id)
@@ -2048,15 +2027,6 @@ h2 {
   font-size: 14px;
   font-weight: 750;
   line-height: 1.35;
-}
-.study-module-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  margin-top: 6px;
-  color: #6b7280;
-  font-size: 12.5px;
-  line-height: 1.4;
 }
 .study-module-list {
   border-top: 1px solid #f0f1f6;
