@@ -185,6 +185,14 @@
       <section id="about-phenomap" class="container-wide schema-section">
         <h2 class="section-title">About PhenoMAP</h2>
         <div class="schema-section-grid">
+          <div ref="schemaFrameRef" class="schema-image-frame">
+            <KnowledgeGraphGlobe v-if="shouldLoadGlobe" @browse-click="goToGraphBrowse" />
+            <div v-else class="schema-globe-placeholder" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
           <div class="schema-text">
             <div class="schema-text-block">
               <p class="text-kicker">Overview</p>
@@ -212,14 +220,6 @@
               <p class="hint">
                 Click the graph to explore.
               </p>
-            </div>
-          </div>
-          <div ref="schemaFrameRef" class="schema-image-frame">
-            <KnowledgeGraphGlobe v-if="shouldLoadGlobe" @browse-click="goToGraphBrowse" />
-            <div v-else class="schema-globe-placeholder" aria-hidden="true">
-              <span></span>
-              <span></span>
-              <span></span>
             </div>
           </div>
         </div>
@@ -863,7 +863,7 @@ onUnmounted(() => {
 }
 .schema-section-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
   align-items: start;
   gap: 56px;
 }
@@ -1139,7 +1139,7 @@ onUnmounted(() => {
     max-width: min(1480px, 92vw);
   }
   .schema-section-grid {
-    grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
     justify-content: center;
   }
 }
@@ -1164,7 +1164,7 @@ onUnmounted(() => {
     max-width: min(1560px, 88vw);
   }
   .schema-section-grid {
-    grid-template-columns: minmax(340px, 430px) minmax(760px, 980px);
+    grid-template-columns: minmax(760px, 980px) minmax(340px, 430px);
     gap: 64px;
   }
 }

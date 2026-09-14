@@ -719,6 +719,146 @@ def _status_for_tool_call(name: str, args: dict) -> str:
     return f"Calling {name}..."
 
 
+_HMDB_ID_RE = re.compile(r"\bHMDB\d+\b", re.I)
+_KEGG_ID_RE = re.compile(r"(?<![A-Z0-9])C\d{5}(?![A-Z0-9])", re.I)
+_PME_ID_RE = re.compile(r"\bPME\d+\b", re.I)
+_INCHI_ID_RE = re.compile(r"\bInChI=[^\s,;]+", re.I)
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        key = value.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+    return out
+
+
+def _explicit_enrichment_args(user_message: str, classification: dict) -> dict | None:
+    """Direct-ID enrichment fast path.
+
+    The normal tool-calling prompt is still responsible for name resolution
+    and nuanced follow-ups. This deliberately narrow path only catches the
+    common website-chat command shape: "Run enrichment for HMDB...". Exact
+    IDs need no entity search or pre-run confirmation, and accepting a model
+    final answer without a run_enrichment call is worse than being a little
+    procedural here.
+    """
+    message = user_message or ""
+    intent = classification.get("intent")
+    if intent != "enrichment" and not re.search(r"\benrich(?:ment|ed|ing)?\b", message, re.I):
+        return None
+
+    candidates = [
+        ("hmdb", [m.group(0).upper() for m in _HMDB_ID_RE.finditer(message)]),
+        ("kegg", [m.group(0).upper() for m in _KEGG_ID_RE.finditer(message)]),
+        ("lab_id", [m.group(0).upper() for m in _PME_ID_RE.finditer(message)]),
+        ("inchi", [m.group(0) for m in _INCHI_ID_RE.finditer(message)]),
+    ]
+    present = [(id_type, _unique_preserve_order(ids)) for id_type, ids in candidates if ids]
+    if len(present) != 1:
+        return None
+
+    id_type, ids = present[0]
+    args: dict = {"ids": ids, "id_type": id_type, "fdr_cutoff": 0.05, "min_overlap": 2}
+
+    fdr = re.search(r"\bfdr\b[^0-9]{0,12}([0-9]*\.?[0-9]+)", message, re.I)
+    if fdr:
+        try:
+            args["fdr_cutoff"] = float(fdr.group(1))
+        except ValueError:
+            pass
+
+    min_overlap = re.search(r"\bmin(?:imum)?[_\s-]*overlap\b[^0-9]{0,12}(\d+)", message, re.I)
+    if min_overlap:
+        try:
+            args["min_overlap"] = int(min_overlap.group(1))
+        except ValueError:
+            pass
+
+    return args
+
+
+def _wants_chinese_reply(user_message: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", user_message or ""))
+
+
+def _format_direct_enrichment_reply(result: dict, args: dict, user_message: str) -> str:
+    ids = args.get("ids") or []
+    id_type = args.get("id_type") or "hmdb"
+    fdr_cutoff = args.get("fdr_cutoff", 0.05)
+    min_overlap = args.get("min_overlap", 2)
+    matched = result.get("matched_input_n")
+    sig_count = result.get("significant_module_count")
+    top_rows = result.get("top_significant_modules") or []
+
+    if result.get("error"):
+        if _wants_chinese_reply(user_message):
+            return f"我尝试运行 module enrichment，但工具返回错误：{result['error']}"
+        return f"I tried to run module enrichment, but the tool returned an error: {result['error']}"
+
+    if result.get("warning"):
+        if _wants_chinese_reply(user_message):
+            return f"我运行了 module enrichment，但输入 ID 没有匹配到 PhenoMAP metabolite：{result['warning']}"
+        return f"I ran module enrichment, but the input IDs did not match PhenoMAP metabolites: {result['warning']}"
+
+    def row_line(row: dict, idx: int) -> str:
+        title = row.get("title") or row.get("module_id") or "Untitled module"
+        module_id = row.get("module_id")
+        cited_title = f"{title} {{{{{module_id}}}}}" if module_id else title
+        return (
+            f"{idx}. {cited_title}: overlap={row.get('overlap_n')}, "
+            f"enrichment_ratio={row.get('enrichment_ratio')}, FDR={row.get('fdr')}"
+        )
+
+    if _wants_chinese_reply(user_message):
+        header = (
+            f"已运行 module enrichment：输入 {len(ids)} 个 {id_type.upper()} ID，"
+            f"匹配到 {matched} 个 metabolite；参数为 FDR cutoff={fdr_cutoff}, "
+            f"min_overlap={min_overlap}。"
+        )
+        if not top_rows:
+            return f"{header}\n\n在这些参数下没有找到显著富集的 module。"
+        lines = "\n".join(row_line(row, i + 1) for i, row in enumerate(top_rows[:10]))
+        return f"{header}\n\n找到 {sig_count} 个显著富集 module。Top results:\n{lines}"
+
+    header = (
+        f"I ran module enrichment for {len(ids)} {id_type.upper()} IDs; "
+        f"{matched} matched PhenoMAP metabolites. Parameters: "
+        f"fdr_cutoff={fdr_cutoff}, min_overlap={min_overlap}."
+    )
+    if not top_rows:
+        return f"{header}\n\nNo significantly enriched modules were found with these settings."
+    lines = "\n".join(row_line(row, i + 1) for i, row in enumerate(top_rows[:10]))
+    return f"{header}\n\nFound {sig_count} significantly enriched modules. Top results:\n{lines}"
+
+
+async def _run_direct_enrichment(
+    resolved_llm: dict,
+    user_message: str,
+    tool_funcs: dict,
+    args: dict,
+):
+    citations: dict = {}
+    tool_trace: list = []
+    async with httpx.AsyncClient() as http_client:
+        yield {"type": "status", "text": _status_for_tool_call("run_enrichment", args)}
+        result, clean_args = await _run_manual_tool(http_client, citations, "run_enrichment", args, tool_funcs)
+    tool_trace.append({"tool": "run_enrichment", "args": clean_args})
+    reply = _format_direct_enrichment_reply(result, clean_args, user_message)
+    yield {
+        "type": "final",
+        "reply": reply,
+        "citations": citations,
+        "tool_calls": tool_trace,
+        "provider": _provider_payload(resolved_llm),
+        "tool_mode": "direct_enrichment",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Stage 1: relevance classification (product/greeting/off-topic vs a real
 # PhenoMAP content question). No tools called here -- "product" is now
@@ -1363,6 +1503,13 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
                     "type": "status",
                     "text": _STATUS_BY_INTENT.get(classification["intent"], "Working on your PhenoMAP question..."),
                 }
+                direct_enrichment_args = _explicit_enrichment_args(effective_user_message, classification)
+                if direct_enrichment_args:
+                    async for event in _run_direct_enrichment(
+                        resolved_llm, effective_user_message, TOOL_FUNCS, direct_enrichment_args
+                    ):
+                        yield event
+                    return
                 system_prompt = _format_execution_prompt(classification)
                 tool_schemas, tool_funcs = TOOL_SCHEMAS, TOOL_FUNCS
 
