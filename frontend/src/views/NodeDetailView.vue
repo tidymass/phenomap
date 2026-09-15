@@ -255,22 +255,17 @@
             </dl>
           </div>
 
-          <div class="card" id="study-modules" v-if="studyModuleGroups.length">
+          <div class="card" id="study-modules" v-if="studyModuleList.length">
             <h2>
               <TermInfo label="Modules In This Study" :definition="termDefinition('Modules In This Study')" heading />
-              <span class="count">{{ studyModules.length }}</span>
+              <span class="count">{{ studyModuleList.length }}</span>
             </h2>
 
             <div class="study-module-groups">
-              <section class="study-module-group" v-for="group in studyModuleGroups" :key="group.key">
-                <div class="study-module-group-head">
-                  <h3>{{ group.label }}</h3>
-                  <span class="count">{{ group.items.length }}</span>
-                </div>
-
+              <section class="study-module-group">
                 <div class="neighbor-list study-module-list">
                   <router-link
-                    v-for="m in group.items"
+                    v-for="m in studyModuleList"
                     :key="m.module_id"
                     :to="`/node/Module/${m.module_id}`"
                     class="neighbor-row study-module-row"
@@ -283,11 +278,6 @@
                       v-if="m.confidence_label"
                       :class="`tier-${String(m.confidence_label).toLowerCase()}`"
                     >{{ m.confidence_label }}</span>
-                    <span
-                      class="direction-badge"
-                      v-if="m.global_direction"
-                      :class="`dir-${String(m.global_direction).toLowerCase()}`"
-                    >{{ m.global_direction }}</span>
                     <svg class="neighbor-row-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="m9 6 6 6-6 6" />
                     </svg>
@@ -459,6 +449,10 @@
                     @node-click="goToNeighbor"
                   />
                   <p class="hint" v-else>No neighbors match the selected filters.</p>
+                  <p class="hint" v-if="neighborGraph && neighborGraph.truncated">
+                    Direct neighbors are all shown; the wider {{ hopCount }}-hop neighborhood is
+                    trimmed to keep the graph readable. The List tab has the full set.
+                  </p>
                 </template>
               </div>
 
@@ -920,12 +914,18 @@ const graphEntityTypes = computed(() => {
 })
 
 const NEIGHBOR_GRAPH_MARGIN = 20
-// Guard against a very high-degree node (e.g. a Study with hundreds of
-// reported Modules) turning the graph into an unreadable hairball, or
-// hop 2/3 fanning out into dozens of API calls -- the full set is still
-// browsable in the List tab.
-const NEIGHBOR_GRAPH_MAX_NODES = 60
-const NEIGHBOR_GRAPH_HOP_FANOUT = 10 // neighbors expanded per node, per hop
+// Hop 1 is the entity's own direct neighbors -- the thing the page is
+// actually about -- so it is drawn in full: no fan-out cap, no node cap.
+// A Study reporting 18 Modules shows all 18, not a silently truncated 10
+// that reads as a contradiction next to the card counts above.
+//
+// Hops 2/3 are still capped. They exist to give a sense of the surrounding
+// neighborhood, and without a cap a hub entity turns the graph into an
+// unreadable hairball and fans out into hundreds of API calls -- the full
+// set is always browsable in the List tab.
+const NEIGHBOR_GRAPH_HOP_FANOUT = 10 // neighbors expanded per node, per hop (hop 2+)
+const NEIGHBOR_GRAPH_MAX_NODES = 60 // nodes added *beyond* hop 1
+const NEIGHBOR_GRAPH_MAX_EXPAND = 12 // frontier nodes expanded per hop (hop 2+)
 
 // "label:id" -> Promise<Neighbor[]> (already allow-list filtered), so
 // re-running the fetch after a hop-count or relationship-type toggle
@@ -976,8 +976,22 @@ async function refreshRawNeighborGraph() {
   let hop1Total = 0
   let truncated = false
 
+  // Budget for hops 2/3 only, sized once hop 1 has drawn every direct
+  // neighbor -- so an entity with a large hop 1 still gets a real second
+  // hop instead of one that is already over budget before it starts.
+  let nodeBudget = Infinity
+
   for (let hop = 1; hop <= hops && frontier.length; hop++) {
-    if (hop > 1) graphLoading.value = true
+    const isFirstHop = hop === 1
+    if (!isFirstHop) graphLoading.value = true
+
+    // Fetching is what costs an API call, so the frontier is trimmed before
+    // the fetch, not after.
+    if (!isFirstHop && frontier.length > NEIGHBOR_GRAPH_MAX_EXPAND) {
+      frontier = frontier.slice(0, NEIGHBOR_GRAPH_MAX_EXPAND)
+      truncated = true
+    }
+    const fanout = isFirstHop ? Infinity : NEIGHBOR_GRAPH_HOP_FANOUT
 
     const neighborsPerFrom = await Promise.all(
       frontier.map((from) =>
@@ -990,7 +1004,7 @@ async function refreshRawNeighborGraph() {
 
     const nextFrontier = []
     for (let i = 0; i < frontier.length; i++) {
-      if (visited.size >= NEIGHBOR_GRAPH_MAX_NODES) {
+      if (visited.size >= nodeBudget) {
         truncated = true
         break
       }
@@ -1000,7 +1014,7 @@ async function refreshRawNeighborGraph() {
 
       let added = 0
       for (const n of neighbors) {
-        if (added >= NEIGHBOR_GRAPH_HOP_FANOUT || visited.size >= NEIGHBOR_GRAPH_MAX_NODES) {
+        if (added >= fanout || visited.size >= nodeBudget) {
           truncated = true
           break
         }
@@ -1018,6 +1032,7 @@ async function refreshRawNeighborGraph() {
         }
       }
     }
+    if (isFirstHop) nodeBudget = visited.size + NEIGHBOR_GRAPH_MAX_NODES
     frontier = nextFrontier
   }
 
@@ -1224,31 +1239,39 @@ function cleanStudyModuleValue(value) {
   return out
 }
 
-const studyModuleGroups = computed(() => {
+// HIGH first, then MEDIUM, then LOW; anything unlabelled or unrecognised sorts
+// last so a missing confidence never outranks a real one.
+const STUDY_MODULE_TIER_ORDER = ['HIGH', 'MEDIUM', 'LOW']
+
+function studyModuleTierRank(module) {
+  const label = cleanStudyModuleValue(module.confidence_label).toUpperCase()
+  const rank = STUDY_MODULE_TIER_ORDER.indexOf(label)
+  return rank === -1 ? STUDY_MODULE_TIER_ORDER.length : rank
+}
+
+// Study pages list every module reported by the study as one flat list.
+// Group headings by comparison_label (e.g. "FXS vs TD") were removed, so a
+// module contributed by more than one comparison is de-duplicated by id here.
+const studyModuleList = computed(() => {
   if (!studyModules.value.length) return []
-  const groups = new Map()
+  const seen = new Map()
   for (const module of studyModules.value) {
-    const label = cleanStudyModuleValue(module.comparison_label) || 'Study-level comparison'
-    if (!groups.has(label)) {
-      groups.set(label, {
-        key: label,
-        label,
-        items: [],
-      })
-    }
-    groups.get(label).items.push(module)
+    const id = cleanStudyModuleValue(module.module_id)
+    if (!id) continue
+    const kept = seen.get(id)
+    // A duplicate keeps its strongest confidence rather than whichever copy the
+    // backend happened to return first.
+    if (kept && studyModuleTierRank(kept) <= studyModuleTierRank(module)) continue
+    seen.set(id, module)
   }
 
-  return [...groups.values()]
-    .map((group) => ({
-      ...group,
-      items: group.items.slice().sort((a, b) => {
-        const aName = cleanStudyModuleValue(a.module_title) || cleanStudyModuleValue(a.module_id)
-        const bName = cleanStudyModuleValue(b.module_title) || cleanStudyModuleValue(b.module_id)
-        return aName.localeCompare(bName)
-      }),
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label))
+  return [...seen.values()].sort((a, b) => {
+    const byTier = studyModuleTierRank(a) - studyModuleTierRank(b)
+    if (byTier !== 0) return byTier
+    const aName = cleanStudyModuleValue(a.module_title) || cleanStudyModuleValue(a.module_id)
+    const bName = cleanStudyModuleValue(b.module_title) || cleanStudyModuleValue(b.module_id)
+    return aName.localeCompare(bName)
+  })
 })
 
 const studySourceItems = computed(() => {
@@ -1444,7 +1467,7 @@ const sections = computed(() => {
     return [
       studyDesignItems.value.length && { id: 'study-design', label: 'Study Design' },
       studyPhenotypeLink.value && { id: 'phenotype', label: 'Phenotype' },
-      studyModuleGroups.value.length && { id: 'study-modules', label: 'Modules' },
+      studyModuleList.value.length && { id: 'study-modules', label: 'Modules' },
       (studySourceItems.value.length || p.value.Link || doiUrl.value) && { id: 'source', label: 'Source & Publication' },
       hasRelationshipData.value && { id: 'relationships', label: 'Connections' },
     ].filter(Boolean)
@@ -2015,24 +2038,8 @@ h2 {
   padding-top: 0;
   border-top: none;
 }
-.study-module-group-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 8px;
-}
-.study-module-group h3 {
-  color: #1b2145;
-  font-size: 14px;
-  font-weight: 750;
-  line-height: 1.35;
-}
 .study-module-list {
   border-top: 1px solid #f0f1f6;
-}
-.study-module-row .direction-badge {
-  flex-shrink: 0;
 }
 .dir-up {
   background: rgba(26, 143, 94, 0.12);
@@ -2371,7 +2378,6 @@ h2 {
   .nd-content {
     max-width: none;
   }
-  .study-module-group-head,
   .study-module-row {
     align-items: flex-start;
   }

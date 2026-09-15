@@ -422,15 +422,21 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 
-  /* One shell for both card rows. The stats strip and the Analysis Tools
-     grid used to carry their own width, padding and gap (1480/28/18 vs
-     1280/24/44), so the four tool cards never lined up with the four stat
-     cards above them. Both now read these, at every breakpoint, which is
-     what keeps column edges matching. */
+  /* The stats strip's shell. It and the Analysis Tools grid used to carry
+     their own width, padding and gap (1480/28/18 vs 1280/24/44) and so
+     never lined up at all; both now read --card-cols/--card-gap, which is
+     what keeps their four columns the same shape. */
   --card-shell-max: min(1480px, 96vw);
   --card-shell-pad: 28px;
   --card-cols: 4;
   --card-gap: 28px;
+
+  /* The Analysis Tools grid is inset further than the stats strip above it,
+     to .container-wide's width and 24px side padding, so the tool cards
+     line up with the About section below rather than running edge-to-edge.
+     The stats strip deliberately keeps the wider shell above. */
+  --tool-shell-max: min(1280px, 92vw);
+  --tool-shell-pad: 24px;
 }
 .container {
   max-width: 1080px;
@@ -959,9 +965,9 @@ onUnmounted(() => {
 
 /* ---------- feature cards ---------- */
 .features-section {
-  max-width: var(--card-shell-max);
+  max-width: var(--tool-shell-max);
   margin: 76px auto 0;
-  padding: 0 var(--card-shell-pad);
+  padding: 0 var(--tool-shell-pad);
   width: 100%;
   box-sizing: border-box;
 }
@@ -1132,6 +1138,7 @@ onUnmounted(() => {
   }
   .home {
     --card-shell-max: min(1720px, 96vw);
+    --tool-shell-max: min(1480px, 92vw);
     --card-cols: 4;
     --card-gap: 32px;
   }
@@ -1159,6 +1166,7 @@ onUnmounted(() => {
   }
   .home {
     --card-shell-max: min(1960px, 94vw);
+    --tool-shell-max: min(1560px, 88vw);
   }
   .container-wide {
     max-width: min(1560px, 88vw);

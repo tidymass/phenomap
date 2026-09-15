@@ -18,7 +18,7 @@ type DB struct {
 }
 
 func NewDB(ctx context.Context) (*DB, error) {
-	uri := getenv("NEO4J_URI", "neo4j://127.0.0.1:7687")
+	uri := getenv("NEO4J_URI", "bolt://127.0.0.1:7687")
 	user := getenv("NEO4J_USER", "neo4j")
 	password := os.Getenv("NEO4J_PASSWORD")
 	database := getenv("NEO4J_DATABASE", "neo4j")

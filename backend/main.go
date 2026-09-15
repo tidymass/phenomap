@@ -22,6 +22,15 @@ func main() {
 		log.Printf("warning: failed to ensure search indexes: %v", err)
 	}
 
+	// The homepage asks for /api/stats on first paint, so pay for it here
+	// rather than making the first visitor after a restart wait for it.
+	// Best-effort: Stats() just computes on demand if this fails.
+	go func() {
+		if err := db.WarmStats(context.Background()); err != nil {
+			log.Printf("warning: failed to warm graph stats cache: %v", err)
+		}
+	}()
+
 	enrichClient := NewEnrichmentClient()
 	chatClient := NewChatClient()
 	initDownloadableFiles()

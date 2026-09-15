@@ -58,7 +58,7 @@ load_config() {
 
   # --- what the Go backend reads (see its getenv calls) ---
   export PORT
-  export NEO4J_URI="neo4j://127.0.0.1:$NEO4J_BOLT_PORT"
+  export NEO4J_URI="bolt://127.0.0.1:$NEO4J_BOLT_PORT"
   export NEO4J_USER="${NEO4J_USER:-neo4j}"
   export NEO4J_PASSWORD
   export NEO4J_DATABASE="${NEO4J_DATABASE:-neo4j}"
