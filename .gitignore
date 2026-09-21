@@ -5,6 +5,7 @@
 
 2_data
 3_data_analysis
+analysis/3_result/CTD_class/disease_similarity_ctd_shared_mechanism_pairs.csv
 
 # Runtime data is distributed separately, not committed to Git.
 neo4j/import/*.csv
