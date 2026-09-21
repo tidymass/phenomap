@@ -1,0 +1,107 @@
+"Phenotype_ID","Phenotype","Phenotype_Type","OLS_ID","Module_N","Community","Community_Stability"
+"PPH000008","Acute coronary syndrome","disease","MONDO:0005542",6,1,0.654701550083903
+"PPH000009","Acute graft versus host disease","disease","MONDO:0020546",7,0,NA
+"PPH000010","Acute myeloid leukemia","disease","MONDO:0018874",12,1,0.654701550083903
+"PPH000013","Aging","trait","EFO:0022597",22,3,0.496633144633145
+"PPH000017","Allergic rhinitis","disease","MONDO:0011786",9,4,0.679195471195471
+"PPH000018","Alport syndrome","disease","MONDO:0018965",3,5,0.828162337662338
+"PPH000019","Alzheimer disease","disease","MONDO:0004975",3,3,0.496633144633145
+"PPH000023","Anemia of chronic renal failure","disease","MONDO:1014668",9,0,NA
+"PPH000028","Astaxanthin","chemical","CHEBI:40968",6,1,0.654701550083903
+"PPH000030","Asthma","disease","MONDO:0004979",21,7,0.9250670995671
+"PPH000032","ATP citrate lyase inhibition","genetic_perturbation","NCBIGene:47",3,0,NA
+"PPH000033","Autism spectrum disorder","disease","MONDO:0005258",6,9,0.838867965367965
+"PPH000039","Bathocuproinedisulfonic acid","chemical","",2,10,0.782793650793651
+"PPH000044","Breast cancer","disease","MONDO:0007254",9,5,0.828162337662338
+"PPH000046","Brown adipose tissue activity","trait","",4,11,0.620603174603175
+"PPH000048","Caffeine","chemical","CHEBI:27732",2,0,NA
+"PPH000054","Cellular senescence","biological_process","GO:0090398",5,7,0.9250670995671
+"PPH000059","Chimeric Antigen Receptor T-cells","intervention","NCIT:C137999",2,0,NA
+"PPH000061","Chronic kidney disease","disease","MONDO:0005300",4,5,0.828162337662338
+"PPH000062","Chronic obstructive pulmonary disease","disease","MONDO:0005002",2,5,0.828162337662338
+"PPH000063","Chronic progressive multiple sclerosis","disease","MONDO:0005284",3,10,0.782793650793651
+"PPH000064","Cigarette Smoking","exposure","MESH:D000073865",9,7,0.9250670995671
+"PPH000065","Cirrhosis of liver","disease","MONDO:0005155",8,4,0.679195471195471
+"PPH000066","Cold Temperature","exposure","MESH:D003080",3,0,NA
+"PPH000069","Colorectal cancer","disease","MONDO:0005575",10,4,0.679195471195471
+"PPH000071","Copper chelator","chemical","CHEBI:166831",3,10,0.782793650793651
+"PPH000073","Coronary Artery Disease","disease","MESH:D003324",3,10,0.782793650793651
+"PPH000074","COVID-19","disease","MONDO:0100096",33,1,0.654701550083903
+"PPH000077","Crohn's disease","disease","HP:0100280",11,1,0.654701550083903
+"PPH000086","Dental caries","disease","MONDO:0005276",2,10,0.782793650793651
+"PPH000094","Drug resistance","trait","EFO:0020001",9,9,0.838867965367965
+"PPH000095","Drug-induced liver injury","disease","MONDO:0005359",2,5,0.828162337662338
+"PPH000096","Dry eye syndrome","disease","MONDO:0006733",2,15,0.610402042402042
+"PPH000099","Environmental Exposure","exposure","MESH:D004781",5,16,0.664753746253746
+"PPH000103","Esophagitis","disease","MONDO:0001409",5,7,0.9250670995671
+"PPH000106","Exercise","exposure","EFO:0000483",16,7,0.9250670995671
+"PPH000110","Fecal Microbiota Transplantation","intervention","NCIT:C118643",9,9,0.838867965367965
+"PPH000112","Ferroptosis","biological_process","GO:0097707",4,15,0.610402042402042
+"PPH000114","FGFR2 inhibition","genetic_perturbation","",3,10,0.782793650793651
+"PPH000115","Fibroblast","cell_type_or_line","CL:0000057",10,3,0.496633144633145
+"PPH000121","Fragile X syndrome","disease","MONDO:0010383",9,10,0.782793650793651
+"PPH000122","Friedreich ataxia","disease","MONDO:0100339",5,0,NA
+"PPH000127","Gemcitabine","chemical","CHEBI:175901",6,5,0.828162337662338
+"PPH000128","Gestational diabetes","disease","MONDO:0005406",2,0,NA
+"PPH000129","Glioblastoma","disease","",2,10,0.782793650793651
+"PPH000132","Gout","disease","MONDO:0005393",2,7,0.9250670995671
+"PPH000135","Hand, foot and mouth disease","disease","MONDO:0005779",2,16,0.664753746253746
+"PPH000137","Healthy Lifestyle","exposure","MESH:D000070497",5,16,0.664753746253746
+"PPH000139","Hemp fiber supplementation","exposure","",6,11,0.620603174603175
+"PPH000140","Hepatic fibrosis","disease","HP:0001395",9,4,0.679195471195471
+"PPH000141","Hepatitis B virus infection","disease","MONDO:0005344",6,1,0.654701550083903
+"PPH000142","Hepatocellular carcinoma","disease","MONDO:0007256",5,5,0.828162337662338
+"PPH000144","High altitude exposure","exposure","",4,0,NA
+"PPH000147","HIV infectious disease","disease","MONDO:0005109",2,15,0.610402042402042
+"PPH000149","HK2 knockout","genetic_perturbation","NCBIGene:3741",3,16,0.664753746253746
+"PPH000155","Hyperglycemia","trait","HP:0003074",9,10,0.782793650793651
+"PPH000156","Hypertension, Pregnancy-Induced","disease","MESH:D046110",4,11,0.620603174603175
+"PPH000163","Infertility","disease","HP:0000789",8,4,0.679195471195471
+"PPH000169","Intermittent Fasting","exposure","MESH:D000093763",3,10,0.782793650793651
+"PPH000174","Ischemic stroke","disease","MONDO:1060198",6,0,NA
+"PPH000178","Keratoconjunctivitis sicca","disease","HP:0001097",4,4,0.679195471195471
+"PPH000179","Kidney cancer","disease","MONDO:0002367",3,0,NA
+"PPH000180","Kidney stone","disease","HP:0000787",2,9,0.838867965367965
+"PPH000182","Lactobacillus crispatus treatment","exposure","",4,3,0.496633144633145
+"PPH000186","Lipid droplet inhibitor","chemical","",3,3,0.496633144633145
+"PPH000188","Liver cancer","disease","MONDO:0002691",10,5,0.828162337662338
+"PPH000190","Low birth weight","trait","",10,1,0.654701550083903
+"PPH000192","Lung adenocarcinoma","disease","MONDO:0005061",15,10,0.782793650793651
+"PPH000193","Lung cancer","disease","MONDO:0008903",2,4,0.679195471195471
+"PPH000194","Lupus nephritis","disease","MONDO:0005556",2,0,NA
+"PPH000205","Metabolic dysfunction-associated steatotic liver disease","disease","MONDO:0013209",5,5,0.828162337662338
+"PPH000206","Metabolic syndrome","disease","EFO:0000195",4,5,0.828162337662338
+"PPH000210","Methylprednisolone","chemical","",3,7,0.9250670995671
+"PPH000215","Myalgic encephalomeyelitis/chronic fatigue syndrome","disease","MONDO:0005404",8,0,NA
+"PPH000216","Myasthenia gravis","disease","MONDO:0009688",3,15,0.610402042402042
+"PPH000221","Nasopharyngeal carcinoma","disease","MONDO:0015459",4,11,0.620603174603175
+"PPH000223","Necrotizing enterocolitis","disease","MONDO:0005313",2,0,NA
+"PPH000224","Nitisinone","chemical","CHEBI:50378",3,0,NA
+"PPH000228","Non-small cell lung carcinoma","disease","MONDO:0005233",6,0,NA
+"PPH000229","Nontuberculous mycobacterial pulmonary infection","disease","HP:0032261",2,4,0.679195471195471
+"PPH000232","Obesity","disease","MONDO:0011122",5,16,0.664753746253746
+"PPH000237","Osteoarthritis","disease","MONDO:0005178",12,4,0.679195471195471
+"PPH000238","Osteoporosis","disease","MONDO:0005298",2,9,0.838867965367965
+"PPH000240","Ovarian endometriosis","disease","MONDO:0006337",2,5,0.828162337662338
+"PPH000242","Parkinson disease","disease","MONDO:0005180",3,16,0.664753746253746
+"PPH000243","Pesticide","chemical","CHEBI:25944",3,15,0.610402042402042
+"PPH000245","PIK3CA mutation","genetic_perturbation","NCBIGene:5290",2,1,0.654701550083903
+"PPH000254","Pregnancy","trait","EFO:0002950",3,16,0.664753746253746
+"PPH000255","Premature birth","trait","EFO:0003917",6,16,0.664753746253746
+"PPH000256","Proliferative diabetic retinopathy","disease","MONDO:0001660",3,3,0.496633144633145
+"PPH000257","Propofol","chemical","",2,9,0.838867965367965
+"PPH000259","Psoriasis","disease","MONDO:0005083",6,4,0.679195471195471
+"PPH000261","Pulmonary arterial hypertension","disease","MONDO:0015924",2,0,NA
+"PPH000264","Renal cell carcinoma","disease","MONDO:0005086",75,1,0.654701550083903
+"PPH000268","Retinitis pigmentosa","disease","MONDO:0019200",2,10,0.782793650793651
+"PPH000274","Sarcopenia","disease","EFO:1000653",5,11,0.620603174603175
+"PPH000277","Schisantherin A","chemical","CHEBI:9048",12,1,0.654701550083903
+"PPH000279","Sepsis","disease","MONDO:1040015",51,1,0.654701550083903
+"PPH000283","Skin aging","trait","EFO:0005422",4,15,0.610402042402042
+"PPH000290","Stress, Mechanical","exposure","MESH:D013314",2,7,0.9250670995671
+"PPH000291","Subarachnoid hemorrhage","disease","MONDO:0005099",3,7,0.9250670995671
+"PPH000295","TDO2 perturbation","genetic_perturbation","NCBIGene:6999",2,10,0.782793650793651
+"PPH000305","Traumatic brain injury","disease","MONDO:0858950",20,16,0.664753746253746
+"PPH000314","Ulcerative colitis","disease","MONDO:0005101",16,9,0.838867965367965
+"PPH000317","Urinary bladder cancer","disease","MONDO:0001187",2,16,0.664753746253746
+"PPH000324","X-linked adrenoleukodystrophy","disease","ORDO:43",3,10,0.782793650793651

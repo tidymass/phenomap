@@ -1,0 +1,59 @@
+Robust inference for CTD-derived shared metabolic mechanism validation
+Input pair table: /Users/yuting/Documents/AtNTUlife/ShenLab/1_MyProject/featureFMA/phenomap/analysis/3_result/disease_similarity_ctd_shared_mechanism_pairs.csv
+Permutations: 5000
+Random seed: 20260917
+
+Permutation test:
+Disease CTD pathway annotations are shuffled across diseases, shared CTD term counts and mean thresholds are recomputed, and the observed above-vs-below BMA difference is compared to this empirical null.
+
+Mixed model:
+BMA similarity is modeled as a function of shared mechanism status with random intercepts for the two disease endpoints in each pair: BMA ~ Shared_Metabolic_Mechanism + (1 | Phenotype_ID_1) + (1 | Phenotype_ID_2).
+
+CTD term set: all_ctd_terms
+  Pair count: 1828
+  Observed above-threshold pairs: 659
+  Observed at-or-below-threshold pairs: 1169
+  Observed mean difference: 0.08598
+  Permutation p-value, mean difference: 0.00179964
+  Observed median difference: 0.1029
+  Permutation p-value, median difference: 0.00179964
+  Observed AUC: 0.6253
+  Permutation p-value, AUC: 0.00179964
+  Mixed model status: ok
+  Mixed model fixed-effect estimate: 0.03152
+  Mixed model LRT p-value: 0.0101615
+  Mixed model message: 
+
+CTD term set: kegg_only
+  Pair count: 1828
+  Observed above-threshold pairs: 735
+  Observed at-or-below-threshold pairs: 1093
+  Observed mean difference: 0.09308
+  Permutation p-value, mean difference: 0.00059988
+  Observed median difference: 0.1324
+  Permutation p-value, median difference: 0.00039992
+  Observed AUC: 0.637
+  Permutation p-value, AUC: 0.00059988
+  Mixed model status: ok
+  Mixed model fixed-effect estimate: 0.0342
+  Mixed model LRT p-value: 0.00597517
+  Mixed model message: 
+
+CTD term set: reactome_only
+  Pair count: 1828
+  Observed above-threshold pairs: 627
+  Observed at-or-below-threshold pairs: 1201
+  Observed mean difference: 0.07067
+  Permutation p-value, mean difference: 0.00539892
+  Observed median difference: 0.07413
+  Permutation p-value, median difference: 0.0115977
+  Observed AUC: 0.6025
+  Permutation p-value, AUC: 0.00639872
+  Mixed model status: ok
+  Mixed model fixed-effect estimate: 0.02131
+  Mixed model LRT p-value: 0.0800629
+  Mixed model message: 
+
+Interpretation note:
+The permutation test is the more direct non-independence sensitivity check here because it preserves the disease-pair BMA structure while breaking the link between CTD annotations and disease identities.
+The mixed model is an approximate crossed-endpoint model for pairwise disease data; use its effect direction and likelihood-ratio test as a complementary sensitivity analysis.
