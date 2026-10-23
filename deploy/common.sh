@@ -26,6 +26,19 @@ R_LIB_DIR="$OPT_DIR/rlib"
 DIST_DIR="$WEB_DIR/frontend/dist"
 IMPORT_DIR="$SRC_DIR/neo4j/import"
 
+# Private runtimes unpacked under opt/ (used on servers whose system Java or
+# Node is missing or too old, e.g. the public Ubuntu 20.04 server) take
+# precedence over whatever the system provides. Servers that already have
+# suitable system versions simply don't have these directories.
+if [ -x "$OPT_DIR/jdk/bin/java" ]; then
+  export JAVA_HOME="$OPT_DIR/jdk"
+  PATH="$OPT_DIR/jdk/bin:$PATH"
+fi
+if [ -x "$OPT_DIR/node/bin/node" ]; then
+  PATH="$OPT_DIR/node/bin:$PATH"
+fi
+export PATH
+
 say()  { printf '\033[1;36m==\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mXX\033[0m %s\n' "$*" >&2; exit 1; }
@@ -58,6 +71,8 @@ load_config() {
 
   # --- what the Go backend reads (see its getenv calls) ---
   export PORT
+  # Empty = listen on all interfaces (lab LAN). Public server: 127.0.0.1.
+  export LISTEN_HOST="${LISTEN_HOST:-}"
   export NEO4J_URI="bolt://127.0.0.1:$NEO4J_BOLT_PORT"
   export NEO4J_USER="${NEO4J_USER:-neo4j}"
   export NEO4J_PASSWORD

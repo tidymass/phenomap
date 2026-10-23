@@ -146,7 +146,9 @@ if [ -x "$VENV_DIR/bin/python" ]; then
   say "Python 虚拟环境已就位: $("$VENV_DIR/bin/python" -V)"
 else
   say "创建 Python 虚拟环境"
-  python3 -m venv "$VENV_DIR"
+  # PYTHON_BIN lets a server whose default python3 is too old (chat-service
+  # needs 3.9+) point at a newer interpreter, e.g. PYTHON_BIN=python3.9.
+  "${PYTHON_BIN:-python3}" -m venv "$VENV_DIR"
 fi
 say "安装 chat-service 依赖"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip

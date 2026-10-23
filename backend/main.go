@@ -90,7 +90,10 @@ func main() {
 		mux.Handle("/", spa)
 	}
 
-	addr := ":" + getenv("PORT", "8080")
+	// LISTEN_HOST empty = all interfaces (the lab server is reached directly
+	// on its LAN address); the public server sets 127.0.0.1 so the backend is
+	// only reachable through the Nginx reverse proxy.
+	addr := getenv("LISTEN_HOST", "") + ":" + getenv("PORT", "8080")
 	srv := &http.Server{
 		Addr:        addr,
 		Handler:     withCORS(mux),
