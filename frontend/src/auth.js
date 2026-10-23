@@ -8,6 +8,7 @@ import {
   apiUpdateEmail,
   apiUpdateProfile,
   fetchCurrentUser,
+  getAppConfig,
 } from './api.js'
 
 // A small reactive singleton instead of pulling in Pinia for one object.
@@ -15,10 +16,28 @@ import {
 export const authState = reactive({
   user: null,
   loading: true,
+  // false on deployments started with AUTH_ENABLED=false (the lab-internal
+  // server): no sign in, no account pages, no Community submissions, and
+  // every analysis page is open without an account.
+  enabled: true,
 })
 
 export async function refreshCurrentUser() {
   try {
+    if (authState.loading) {
+      // Only asked once, on first load. If /api/config can't be reached,
+      // keep the default (accounts on) rather than opening pages up.
+      try {
+        const config = await getAppConfig()
+        authState.enabled = config.auth_enabled !== false
+      } catch (e) {
+        authState.enabled = true
+      }
+    }
+    if (!authState.enabled) {
+      authState.user = null
+      return
+    }
     authState.user = await fetchCurrentUser()
   } catch (e) {
     authState.user = null

@@ -21,16 +21,16 @@
           <router-link to="/chat" class="dropdown-item">PhenoMAP Chat</router-link>
         </NavDropdown>
 
-        <router-link to="/community" class="nav-link">Community</router-link>
+        <router-link v-if="authState.enabled && !authState.loading" to="/community" class="nav-link">Community</router-link>
         <router-link to="/download" class="nav-link">Download</router-link>
         <router-link to="/help" class="nav-link">Help</router-link>
       </nav>
 
-      <NavDropdown v-if="authState.user" :label="authState.user.display_name" align="right" avatar>
+      <NavDropdown v-if="authState.enabled && authState.user" :label="authState.user.display_name" align="right" avatar>
         <router-link to="/account" class="dropdown-item">Account</router-link>
         <a href="#" class="dropdown-item" @click.prevent="handleLogout">Sign out</a>
       </NavDropdown>
-      <router-link v-else to="/login" class="sign-in-link">Sign In</router-link>
+      <router-link v-else-if="authState.enabled && !authState.loading" to="/login" class="sign-in-link">Sign In</router-link>
     </header>
     <main :class="{ 'full-bleed': route.meta.fullBleed }">
       <router-view />

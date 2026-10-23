@@ -39,10 +39,9 @@ var communitySubmissionFileSpecs = []struct {
 // POST /api/community/submissions (multipart/form-data) -- auth required.
 func handleCreateSubmission(authDB *AuthDB, emailCfg EmailConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-
-		user, err := authDB.CurrentUser(ctx, sessionTokenFromRequest(r))
+		authCtx, authCancel := context.WithTimeout(r.Context(), 8*time.Second)
+		user, err := authDB.CurrentUser(authCtx, sessionTokenFromRequest(r))
+		authCancel()
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "please sign in before submitting study data")
 			return
@@ -53,6 +52,14 @@ func handleCreateSubmission(authDB *AuthDB, emailCfg EmailConfig) http.HandlerFu
 			writeError(w, http.StatusBadRequest, "request too large or malformed: "+err.Error())
 			return
 		}
+		defer r.MultipartForm.RemoveAll()
+
+		// Started only after the upload has been fully received: a large
+		// upload on a slow connection can take longer than 30s by itself,
+		// and the DB/disk work below must not inherit an already-expired
+		// deadline.
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
 
 		field := func(name string) string { return strings.TrimSpace(r.FormValue(name)) }
 		in := CommunitySubmissionInput{
@@ -113,6 +120,10 @@ func handleCreateSubmission(authDB *AuthDB, emailCfg EmailConfig) http.HandlerFu
 				continue
 			}
 			defer f.Close()
+			if header.Size > maxSubmissionFileBytes {
+				writeError(w, http.StatusBadRequest, spec.label+" is larger than 20 MB")
+				return
+			}
 			ext := strings.ToLower(filepath.Ext(header.Filename))
 			if !allowedSubmissionExt[ext] {
 				writeError(w, http.StatusBadRequest, spec.label+" must be CSV, TSV, TXT, or XLSX")
@@ -130,10 +141,14 @@ func handleCreateSubmission(authDB *AuthDB, emailCfg EmailConfig) http.HandlerFu
 
 		// The submission is already saved at this point -- a failed
 		// notification email shouldn't make the caller think their upload
-		// was lost, so this is logged rather than returned as an error.
-		if err := emailCfg.sendCommunitySubmissionNotice(user, submission); err != nil {
-			log.Printf("community submission notice email error: %v", err)
-		}
+		// was lost, so this is logged rather than returned as an error. It
+		// is sent in the background so a slow SMTP server doesn't hold up
+		// the response.
+		go func() {
+			if err := emailCfg.sendCommunitySubmissionNotice(user, submission); err != nil {
+				log.Printf("community submission notice email error: %v", err)
+			}
+		}()
 
 		writeJSON(w, http.StatusOK, submission)
 	}

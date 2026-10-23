@@ -368,8 +368,8 @@ async function runSearch({ resetPage = true } = {}) {
       pageSize,
     })
     if (controller.signal.aborted) return
-    results.value = data.results
-    total.value = data.total
+    results.value = data.results ?? []
+    total.value = data.total ?? 0
   } catch (e) {
     if (e.name === 'AbortError') return
     error.value = e.message

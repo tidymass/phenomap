@@ -129,16 +129,8 @@
         "url": "https://github.com/tidymass/phenomap"
       },
       {
-        "label": "FeatureMAP R package",
-        "url": "https://github.com/tidymass/featuremap"
-      },
-      {
         "label": "FeatureMAP web app",
         "url": "https://featuremap.jaspershenlab.com"
-      },
-      {
-        "label": "FeatureMAP tutorial",
-        "url": "https://www.tidymass.org/featuremap_tutorial"
       }
     ]
   },

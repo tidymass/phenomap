@@ -43,7 +43,7 @@
         <button type="button" class="account-button" @click="modelMenuOpen = !modelMenuOpen">
           <span class="user-avatar">{{ userInitials }}</span>
           <span class="account-text">
-            <strong>{{ authState.user?.display_name || 'Account' }}</strong>
+            <strong>{{ authState.user?.display_name || (authState.enabled ? 'Account' : 'Settings') }}</strong>
             <small>{{ modelLabel }}</small>
           </span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">

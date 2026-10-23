@@ -23,6 +23,8 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8080").rstrip("/")
 # them from typing the base URL/model. SiliconFlow is the default provider.
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+# Tried first; agent.py falls back to the other SiliconFlow site
+# (api.siliconflow.com) automatically when a key belongs to that one.
 SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
 SILICONFLOW_MODEL = os.getenv("SILICONFLOW_MODEL", "Qwen/Qwen2.5-72B-Instruct")
 

@@ -38,6 +38,12 @@
           <p class="section-kicker">Resource Overview</p>
           <h2>{{ intro.overview_heading }}</h2>
           <p v-for="(text, i) in intro.overview_paragraphs" :key="i">{{ text }}</p>
+          <figure class="schema-figure">
+            <img src="/phenomap.png" alt="PhenoMAP knowledge graph schema" />
+            <figcaption>
+              Entities and relationships in the PhenoMAP knowledge graph.
+            </figcaption>
+          </figure>
         </section>
 
         <section id="scope" class="article-section">
@@ -67,12 +73,6 @@
               <dd>{{ node.body }}</dd>
             </div>
           </dl>
-          <figure class="schema-figure">
-            <img src="/phenomap.png" alt="PhenoMAP knowledge graph schema" />
-            <figcaption>
-              Entities and relationships in the PhenoMAP knowledge graph.
-            </figcaption>
-          </figure>
           <dl class="definition-list">
             <div v-for="rel in intro.relationships" :key="rel.title">
               <dt><code>{{ rel.title }}</code></dt>

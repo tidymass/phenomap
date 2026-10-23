@@ -50,11 +50,14 @@ the connection..., ...) instead of a static spinner, matching the request
 that motivated this whole restructuring.
 """
 
+import asyncio
+import hashlib
 import json
 import re
+import threading
 
 import httpx
-from openai import APIConnectionError, OpenAI
+from openai import APIConnectionError, AuthenticationError, BadRequestError, NotFoundError, OpenAI
 
 from config import (
     MAX_TOOL_TURNS,
@@ -98,6 +101,68 @@ def _resolve_llm(llm_config: dict) -> dict:
         "base_url": base_url.rstrip("/"),
         "model": model,
     }
+
+
+# SiliconFlow runs two separate sites with separate accounts:
+# api.siliconflow.cn (mainland China) and api.siliconflow.com (global). A key
+# issued by one is rejected (401) by the other, so a user who signed up on
+# siliconflow.com could never use the chat while only the .cn site was tried.
+# The first chat turn for a key probes /models on each site (configured one
+# first) and remembers which one accepted it -- per key, not per process, so
+# one user's site never gets pinned for everybody else (same fix as the
+# FeatureMAP Shiny app).
+_SILICONFLOW_SITES = ("https://api.siliconflow.cn/v1", "https://api.siliconflow.com/v1")
+_siliconflow_site_by_key: dict[str, str] = {}
+
+
+async def _siliconflow_base_url(api_key: str, configured: str) -> str:
+    fingerprint = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    cached = _siliconflow_site_by_key.get(fingerprint)
+    if cached:
+        return cached
+
+    candidates: list[str] = []
+    for url in (configured, *_SILICONFLOW_SITES):
+        url = (url or "").strip().rstrip("/")
+        if url and url not in candidates:
+            candidates.append(url)
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for base in candidates:
+            try:
+                resp = await client.get(f"{base}/models", headers={"Authorization": f"Bearer {api_key}"})
+            except httpx.HTTPError:
+                continue
+            if resp.status_code == 200:
+                if len(_siliconflow_site_by_key) > 5000:
+                    _siliconflow_site_by_key.clear()
+                _siliconflow_site_by_key[fingerprint] = base
+                return base
+    # Neither site accepted the key (or neither was reachable): use the first
+    # one and let the real call report the error.
+    return candidates[0]
+
+
+def _friendly_llm_error(e: Exception, resolved_llm: dict) -> str | None:
+    """Plain-language message for the provider errors users actually hit
+    (bad key, unknown model), instead of the raw SDK error dump."""
+    label = resolved_llm.get("provider_label", "The model provider")
+    model = resolved_llm.get("model", "")
+    if isinstance(e, AuthenticationError):
+        if resolved_llm.get("provider") == "siliconflow":
+            return (
+                "SiliconFlow rejected this API key (checked both api.siliconflow.cn and api.siliconflow.com). "
+                "Please check the key in Model settings."
+            )
+        return f"{label} rejected this API key. Please check the key in Model settings."
+    if isinstance(e, (NotFoundError, BadRequestError)):
+        text = str(e).lower()
+        if "model" in text and ("not exist" in text or "not found" in text or "does not exist" in text or "invalid" in text):
+            return (
+                f'{label} does not offer the model "{model}" for this key. '
+                "Pick another model name from the provider's model list in Model settings."
+            )
+    return None
 
 
 def _completion(
@@ -872,6 +937,51 @@ def _format_execution_prompt(classification: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+_STREAM_DONE = object()
+
+
+async def _iterate_in_thread(make_stream):
+    """Async-iterates a *synchronous* OpenAI stream without blocking the
+    event loop. chat-service runs as a single uvicorn process, and the
+    OpenAI client used here is the blocking one: calling it directly inside
+    an async function froze the whole service for the length of that LLM
+    call, so a second user's chat (or even the health check) had to wait
+    for the first one to finish. make_stream() (which opens the stream) and
+    the iteration over it both run in a worker thread; chunks are handed
+    back to the event loop through a queue. Exceptions raised in the thread
+    (e.g. APIConnectionError) are re-raised here, at the await site."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    stop = threading.Event()
+
+    def worker():
+        try:
+            stream = make_stream()
+            for chunk in stream:
+                if stop.is_set():
+                    break
+                loop.call_soon_threadsafe(queue.put_nowait, chunk)
+        except BaseException as e:  # noqa: BLE001 -- forwarded to the consumer
+            loop.call_soon_threadsafe(queue.put_nowait, e)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, _STREAM_DONE)
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    try:
+        while True:
+            item = await queue.get()
+            if item is _STREAM_DONE:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+    finally:
+        # Consumer stopped early (client disconnected, error downstream):
+        # tell the worker to stop pulling more chunks.
+        stop.set()
+
+
 async def _stream_completion(llm_client, resolved_llm: dict, messages: list[dict], *, use_tools: bool):
     """Runs one streaming chat completion. Yields {"type": "content", "text": ...} for
     each piece of natural-language text as it arrives, which is what lets
@@ -899,15 +1009,10 @@ async def _stream_completion(llm_client, resolved_llm: dict, messages: list[dict
             f"could not reach {where} -- is that server running and reachable from chat-service? ({e})"
         )
 
-    try:
-        stream = llm_client.chat.completions.create(**kwargs)
-    except APIConnectionError as e:
-        raise _connection_error(e) from e
-
     content_parts: list[str] = []
     tool_calls_acc: dict[int, dict] = {}
     try:
-        for chunk in stream:
+        async for chunk in _iterate_in_thread(lambda: llm_client.chat.completions.create(**kwargs)):
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -967,13 +1072,15 @@ async def _stream_alias_confirmation(llm_client, resolved_llm: dict, user_messag
     )
     got_any = False
     try:
-        stream = llm_client.chat.completions.create(
-            model=resolved_llm["model"],
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            stream=True,
+        stream = _iterate_in_thread(
+            lambda: llm_client.chat.completions.create(
+                model=resolved_llm["model"],
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                stream=True,
+            )
         )
-        for chunk in stream:
+        async for chunk in stream:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -1099,7 +1206,10 @@ async def _run_execution_native(
                     yield event
                 return
 
-            response = _completion(
+            # Blocking OpenAI call -> worker thread, so other users' chats
+            # keep running meanwhile (see _iterate_in_thread).
+            response = await asyncio.to_thread(
+                _completion,
                 llm_client,
                 resolved_llm["model"],
                 messages,
@@ -1247,6 +1357,8 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
         yield {"type": "error", "message": str(e)}
         return
 
+    if resolved_llm["provider"] == "siliconflow":
+        resolved_llm["base_url"] = await _siliconflow_base_url(resolved_llm["api_key"], resolved_llm["base_url"])
     llm_client = OpenAI(api_key=resolved_llm["api_key"], base_url=resolved_llm["base_url"])
 
     try:
@@ -1269,7 +1381,9 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
             tool_schemas, tool_funcs = TOOL_SCHEMAS, TOOL_FUNCS
         else:
             yield {"type": "status", "text": _STATUS_RELEVANCE}
-            relevance = _classify_relevance(llm_client, resolved_llm, effective_user_message, history)
+            relevance = await asyncio.to_thread(
+                _classify_relevance, llm_client, resolved_llm, effective_user_message, history
+            )
 
             if relevance["category"] == "off_topic":
                 # The only category still answered directly by stage 1 --
@@ -1295,7 +1409,9 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
                 tool_schemas, tool_funcs = PRODUCT_TOOL_SCHEMAS, PRODUCT_TOOL_FUNCS
             else:
                 yield {"type": "status", "text": _STATUS_INTENT}
-                classification = _classify_intent(llm_client, resolved_llm, effective_user_message, history)
+                classification = await asyncio.to_thread(
+                    _classify_intent, llm_client, resolved_llm, effective_user_message, history
+                )
                 yield {
                     "type": "status",
                     "text": _STATUS_BY_INTENT.get(classification["intent"], "Working on your PhenoMAP question..."),
@@ -1321,4 +1437,5 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
     except Exception as e:  # noqa: BLE001 -- surface any unexpected failure as a terminal
         # stream event instead of an unhandled exception, since by the time
         # we're mid-stream the HTTP response has already started with a 200.
-        yield {"type": "error", "message": f"chat agent failed: {e}"}
+        friendly = _friendly_llm_error(e, resolved_llm)
+        yield {"type": "error", "message": friendly or f"chat agent failed: {e}"}

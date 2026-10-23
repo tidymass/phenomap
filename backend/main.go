@@ -4,8 +4,24 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
+
+// authEnabled reports whether accounts (sign up / sign in / account page)
+// and the account-linked Community submissions are turned on. Controlled
+// by AUTH_ENABLED: the public deployment keeps it on (the default, so an
+// unset variable never silently opens anything up), the lab-internal
+// deployment sets AUTH_ENABLED=false so everyone can use the site without
+// an account. The frontend asks GET /api/config at startup and hides the
+// matching pages and links.
+func authEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(getenv("AUTH_ENABLED", "true"))) {
+	case "false", "0", "no", "off":
+		return false
+	}
+	return true
+}
 
 func main() {
 	ctx := context.Background()
@@ -35,15 +51,14 @@ func main() {
 	chatClient := NewChatClient()
 	initDownloadableFiles()
 
-	authDB, err := NewAuthDB()
-	if err != nil {
-		log.Fatalf("failed to open auth db: %v", err)
-	}
-	defer authDB.Close()
+	withAuth := authEnabled()
 	emailCfg := loadEmailConfig()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{"auth_enabled": withAuth})
+	})
 	mux.HandleFunc("GET /api/stats", handleStats(db))
 	mux.HandleFunc("GET /api/graph/overview", handleGraphOverview(db))
 	mux.HandleFunc("GET /api/search", handleSearch(db))
@@ -54,24 +69,20 @@ func main() {
 	mux.HandleFunc("POST /api/contact", handleContact(emailCfg))
 	mux.HandleFunc("GET /api/download-all", handleDownloadAll)
 	mux.HandleFunc("GET /api/download/{filename}", handleDownload)
-	mux.HandleFunc("POST /api/auth/signup", handleSignUp(authDB, emailCfg))
-	mux.HandleFunc("POST /api/auth/login", handleLogin(authDB))
-	mux.HandleFunc("POST /api/auth/logout", handleLogout(authDB))
-	mux.HandleFunc("POST /api/auth/delete-account", handleDeleteAccount(authDB, emailCfg))
-	mux.HandleFunc("GET /api/auth/confirm-delete-account", handleConfirmAccountDeletion(authDB))
-	mux.HandleFunc("POST /api/auth/update-profile", handleUpdateProfile(authDB))
-	mux.HandleFunc("POST /api/auth/update-email", handleUpdateEmail(authDB, emailCfg))
-	mux.HandleFunc("GET /api/auth/confirm-email-change", handleConfirmEmailChange(authDB))
-	mux.HandleFunc("POST /api/auth/change-password", handleChangePassword(authDB))
-	mux.HandleFunc("GET /api/auth/me", handleMe(authDB))
-	mux.HandleFunc("GET /api/auth/verify", handleVerifyEmail(authDB))
-	mux.HandleFunc("POST /api/auth/resend-verification", handleResendVerification(authDB, emailCfg))
-	mux.HandleFunc("POST /api/auth/forgot-password", handleForgotPassword(authDB, emailCfg))
-	mux.HandleFunc("POST /api/auth/reset-password", handleResetPassword(authDB))
+	// Accounts and Community submissions only exist when auth is on; with
+	// AUTH_ENABLED=false their routes aren't registered at all (so they 404)
+	// and the auth database is never opened or created.
+	if withAuth {
+		authDB, err := NewAuthDB()
+		if err != nil {
+			log.Fatalf("failed to open auth db: %v", err)
+		}
+		defer authDB.Close()
+		registerAuthRoutes(mux, authDB, emailCfg)
+	} else {
+		log.Printf("AUTH_ENABLED=false: accounts and Community submissions are disabled")
+	}
 	mux.HandleFunc("GET /api/node/{label}/{id}", handleNodeDetail(db))
-	mux.HandleFunc("POST /api/community/submissions", handleCreateSubmission(authDB, emailCfg))
-	mux.HandleFunc("GET /api/community/submissions", handleListSubmissions(authDB))
-	mux.HandleFunc("GET /api/community/submissions/{id}/files/{key}", handleDownloadSubmissionFile(authDB))
 
 	// Deployed as a single service, the backend also serves the built
 	// frontend; in local dev FRONTEND_DIST_DIR is unset and this is a no-op.
@@ -102,4 +113,26 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// registerAuthRoutes wires up the account and Community submission
+// endpoints -- only called when authEnabled() is true.
+func registerAuthRoutes(mux *http.ServeMux, authDB *AuthDB, emailCfg EmailConfig) {
+	mux.HandleFunc("POST /api/auth/signup", handleSignUp(authDB, emailCfg))
+	mux.HandleFunc("POST /api/auth/login", handleLogin(authDB))
+	mux.HandleFunc("POST /api/auth/logout", handleLogout(authDB))
+	mux.HandleFunc("POST /api/auth/delete-account", handleDeleteAccount(authDB, emailCfg))
+	mux.HandleFunc("GET /api/auth/confirm-delete-account", handleConfirmAccountDeletion(authDB))
+	mux.HandleFunc("POST /api/auth/update-profile", handleUpdateProfile(authDB))
+	mux.HandleFunc("POST /api/auth/update-email", handleUpdateEmail(authDB, emailCfg))
+	mux.HandleFunc("GET /api/auth/confirm-email-change", handleConfirmEmailChange(authDB))
+	mux.HandleFunc("POST /api/auth/change-password", handleChangePassword(authDB))
+	mux.HandleFunc("GET /api/auth/me", handleMe(authDB))
+	mux.HandleFunc("GET /api/auth/verify", handleVerifyEmail(authDB))
+	mux.HandleFunc("POST /api/auth/resend-verification", handleResendVerification(authDB, emailCfg))
+	mux.HandleFunc("POST /api/auth/forgot-password", handleForgotPassword(authDB, emailCfg))
+	mux.HandleFunc("POST /api/auth/reset-password", handleResetPassword(authDB))
+	mux.HandleFunc("POST /api/community/submissions", handleCreateSubmission(authDB, emailCfg))
+	mux.HandleFunc("GET /api/community/submissions", handleListSubmissions(authDB))
+	mux.HandleFunc("GET /api/community/submissions/{id}/files/{key}", handleDownloadSubmissionFile(authDB))
 }

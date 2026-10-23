@@ -236,7 +236,7 @@
                 <h2>Enrichment overview</h2>
                 <p>
                   Each point is a module. Position = effect size vs. significance, color = significant vs.
-                  not{{ sigBasis === 'fdr' ? ', dashed line = your FDR cutoff.' : '.' }}
+                  not, dashed line = your {{ sigBasisLabel }} cutoff.
                 </p>
               </div>
               <div class="me-chart-legend">
@@ -347,7 +347,7 @@
                   :transform="`translate(16 ${(chartLayout.plotTop + chartLayout.plotBottom) / 2}) rotate(-90)`"
                   text-anchor="middle"
                 >
-                  -log10(FDR)
+                  -log10({{ sigBasisLabel }})
                 </text>
 
                 <circle
@@ -377,8 +377,8 @@
                   <dd>{{ chartTooltip.overlap }} / {{ chartTooltip.moduleSize }}</dd>
                   <dt>Ratio</dt>
                   <dd>{{ chartTooltip.ratio }}</dd>
-                  <dt>FDR</dt>
-                  <dd>{{ chartTooltip.fdr }}</dd>
+                  <dt>{{ chartTooltip.sigLabel }}</dt>
+                  <dd>{{ chartTooltip.sig }}</dd>
                 </dl>
               </div>
             </div>
@@ -837,7 +837,10 @@ function nodeRoute(moduleId) {
   }
 }
 
-// ---------- bubble chart (log2 Enrichment Ratio vs -log10 FDR) ----------
+// ---------- bubble chart (log2 Enrichment Ratio vs -log10 FDR or P-value) ----------
+// The y-axis follows the selected significance basis (sigBasis), so the
+// chart, the significant coloring and the dashed cutoff line all use the
+// same statistic.
 // Only modules that actually share a metabolite with the input are plotted --
 // modules with zero overlap have Enrichment_Ratio = 0 (log2 undefined) and
 // carry no signal, so including them would just crowd the chart with points
@@ -850,13 +853,19 @@ const chartTooltip = ref({
   overlap: '',
   moduleSize: '',
   ratio: '',
-  fdr: '',
+  sig: '',
+  sigLabel: 'FDR',
   significant: false,
   x: 16,
   y: 16,
 })
 
-const MIN_LOG10_FDR_FLOOR = 1e-12
+const MIN_LOG10_SIG_FLOOR = 1e-12
+
+function sigValue(row) {
+  const v = sigBasis.value === 'fdr' ? Number(row.FDR) : Number(row.P_Value)
+  return Number.isFinite(v) ? v : 1
+}
 
 const chartPoints = computed(() => {
   if (!result.value?.enrichment) return []
@@ -866,12 +875,12 @@ const chartPoints = computed(() => {
       id: r.Module_ID,
       title: r.title || r.Module_ID,
       x: Math.log2(Number(r.Enrichment_Ratio)),
-      fdr: Number.isFinite(Number(r.FDR)) ? Number(r.FDR) : 1,
+      sig: sigValue(r),
       overlap: r.Overlap_N,
       moduleSize: r.Module_Set_Size,
       significant: isSignificant(r),
     }))
-    .map((p) => ({ ...p, y: -Math.log10(Math.max(p.fdr, MIN_LOG10_FDR_FLOOR)) }))
+    .map((p) => ({ ...p, y: -Math.log10(Math.max(p.sig, MIN_LOG10_SIG_FLOOR)) }))
 })
 
 const CHART_WIDTH = 960
@@ -914,9 +923,9 @@ const chartLayout = computed(() => {
   const xPad = Math.max(0.5, (Math.max(...xs) - Math.min(...xs)) * 0.1)
   const xMin = Math.min(0, Math.min(...xs) - xPad)
   const xMax = Math.max(...xs) + xPad
-  const fdrThresholdRaw = sigBasis.value === 'fdr' ? -Math.log10(sigCutoff.value || 0.05) : 0
+  const thresholdRaw = -Math.log10(sigCutoff.value || 0.05)
   const yMin = 0
-  const yMax = Math.max(...ys, fdrThresholdRaw) * 1.15 || 1
+  const yMax = Math.max(...ys, thresholdRaw) * 1.15 || 1
   const rMin = Math.min(...overlaps)
   const rMax = Math.max(...overlaps)
 
@@ -941,11 +950,9 @@ const chartLayout = computed(() => {
 
   const xTicks = niceTicks(xMin, xMax, 5).map((v) => ({ value: v, px: scaleX(v), label: v.toFixed(1) }))
   const yTicks = niceTicks(yMin, yMax, 5).map((v) => ({ value: v, px: scaleY(v), label: v.toFixed(1) }))
-  // The dashed threshold line only maps cleanly onto this FDR-based y-axis
-  // when FDR is also the chosen significance basis -- a P-value cutoff
-  // doesn't correspond to a fixed point on a -log10(FDR) scale.
-  const thresholdY =
-    sigBasis.value === 'fdr' && fdrThresholdRaw >= yMin && fdrThresholdRaw <= yMax ? scaleY(fdrThresholdRaw) : null
+  // The y-axis is -log10 of the selected basis, so the cutoff for that
+  // same basis always maps onto it.
+  const thresholdY = thresholdRaw >= yMin && thresholdRaw <= yMax ? scaleY(thresholdRaw) : null
 
   const sizeLegend =
     rMax === rMin
@@ -990,7 +997,8 @@ function showChartTooltip(pt, event) {
     overlap: pt.overlap,
     moduleSize: pt.moduleSize,
     ratio: `${Math.pow(2, pt.x).toFixed(2)}x`,
-    fdr: formatP(pt.fdr),
+    sig: formatP(pt.sig),
+    sigLabel: sigBasisLabel.value,
     significant: pt.significant,
   }
   moveChartTooltip(event)

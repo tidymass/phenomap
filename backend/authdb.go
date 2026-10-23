@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -18,7 +19,18 @@ type AuthDB struct {
 
 func NewAuthDB() (*AuthDB, error) {
 	path := getenv("AUTH_DB_PATH", "phenomap_auth.db")
-	db, err := sql.Open("sqlite", path)
+	// busy_timeout: without it, a second writer (e.g. a sign-in creating a
+	// session while a community submission's transaction is open) fails
+	// immediately with "database is locked" instead of waiting its turn.
+	dsn := path
+	if !strings.Contains(dsn, "_pragma=busy_timeout") {
+		sep := "?"
+		if strings.Contains(dsn, "?") {
+			sep = "&"
+		}
+		dsn += sep + "_pragma=busy_timeout(10000)"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open auth db: %w", err)
 	}

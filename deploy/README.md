@@ -47,7 +47,7 @@ cd src/deploy
 
 cp phenomap.env.example "$DEPLOY/config/phenomap.env"   # 需要先 mkdir -p config
 chmod 600 "$DEPLOY/config/phenomap.env"
-vim "$DEPLOY/config/phenomap.env"      # 至少要填 NEO4J_PASSWORD 和 SMTP_PASSWORD
+vim "$DEPLOY/config/phenomap.env"      # 至少要填 NEO4J_PASSWORD；AUTH_ENABLED=false 是免登录的课题组版，公开服务器改成 true 并填 SMTP_PASSWORD
 
 ./bootstrap.sh          # 装 Go / Neo4j+APOC / plumber / python 环境（十几分钟）
 # 从本地 scp 数据到 $DEPLOY/src/neo4j/import/ 之后：
@@ -103,7 +103,7 @@ crontab -e
 | Path Query 报 `Unknown function 'apoc.path.expandConfig'` | APOC 插件没装上或没重启，看 `opt/neo4j/plugins/` |
 | Module Enrichment 报错 | `logs/enrich.log`；确认 `src/neo4j/import` 存在 |
 | Q&A 报连不上模型 | 用户的 API key 或模型名不对；或服务器连不上 `SILICONFLOW_BASE_URL` / `OPENAI_BASE_URL` |
-| 注册收不到验证邮件 | `logs/web.log` 里的 SMTP 报错；确认用的是 Gmail 应用专用密码 |
+| 注册收不到验证邮件 | `logs/web.log` 里的 SMTP 报错；确认 SMTP_PASSWORD 填的是 163 邮箱的 SMTP 授权码，且服务器能连出 smtp.163.com:465 |
 
 端口冲突要注意：这台机器上 `8080` 已被别的服务占用，`8787` 是 RStudio Server，
 `3838` 是 featuremap 的 Shiny。本部署刻意避开了这三个。

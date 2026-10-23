@@ -152,7 +152,7 @@ async function runSearch() {
   }
   try {
     const data = await searchNodes(query.value.trim(), label.value)
-    results.value = data.results
+    results.value = data.results ?? []
   } catch (e) {
     results.value = []
   }

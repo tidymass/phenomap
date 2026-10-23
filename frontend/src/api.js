@@ -71,6 +71,12 @@ export function apiChangePassword(payload) {
   return postJSON('/api/auth/change-password', payload)
 }
 
+// { auth_enabled } -- whether this deployment has accounts at all
+// (backend AUTH_ENABLED). The lab-internal deployment turns them off.
+export function getAppConfig() {
+  return getJSON('/api/config')
+}
+
 export function fetchCurrentUser() {
   return getJSON('/api/auth/me')
 }

@@ -78,6 +78,8 @@ load_config() {
   export PUBLIC_FRONTEND_URL="$SITE_URL"
   export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-$SITE_URL}"
   export SMTP_HOST SMTP_PORT SMTP_USERNAME SMTP_PASSWORD SMTP_FROM
+  # true = 公开部署（需要登录、有 Community 投稿）；false = 课题组内网（免登录）。
+  export AUTH_ENABLED="${AUTH_ENABLED:-true}"
 
   # --- what the Python chat-service reads (see chat-service/config.py) ---
   export BACKEND_URL="http://127.0.0.1:$PORT"

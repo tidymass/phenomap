@@ -39,12 +39,12 @@ const routes = [
   { path: '/download', name: 'download', component: DownloadView, meta: { requiresAuth: true, fullBleed: true } },
   { path: '/help', redirect: '/help/get-started' },
   { path: '/help/:topic', name: 'help', component: HelpView, meta: { fullBleed: true } },
-  { path: '/community', name: 'community', component: CommunityView, meta: { fullBleed: true } },
-  { path: '/signup', name: 'signup', component: SignUpView, meta: { fullBleed: true } },
-  { path: '/login', name: 'login', component: SignInView, meta: { fullBleed: true } },
-  { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { fullBleed: true } },
-  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { fullBleed: true } },
-  { path: '/account', name: 'account', component: AccountView, meta: { fullBleed: true } },
+  { path: '/community', name: 'community', component: CommunityView, meta: { fullBleed: true, authOnly: true } },
+  { path: '/signup', name: 'signup', component: SignUpView, meta: { fullBleed: true, authOnly: true } },
+  { path: '/login', name: 'login', component: SignInView, meta: { fullBleed: true, authOnly: true } },
+  { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { fullBleed: true, authOnly: true } },
+  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { fullBleed: true, authOnly: true } },
+  { path: '/account', name: 'account', component: AccountView, meta: { fullBleed: true, authOnly: true } },
   { path: '/node/:label/:id', name: 'node-detail', component: NodeDetailView, props: true, meta: { fullBleed: true } },
 ]
 
@@ -60,8 +60,15 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (!to.meta.requiresAuth) return true
+  if (!to.meta.requiresAuth && !to.meta.authOnly) return true
   if (authState.loading) await authReady
+  // Deployment without accounts (AUTH_ENABLED=false): everything that
+  // normally needs sign-in is open, and the account/Community pages
+  // (authOnly) don't exist -- send those to the homepage.
+  if (!authState.enabled) {
+    return to.meta.authOnly ? { path: '/' } : true
+  }
+  if (!to.meta.requiresAuth) return true
   if (!authState.user) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }

@@ -1,15 +1,19 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/smtp"
 	"os"
 	"strings"
+	"time"
 )
 
 // EmailConfig holds SMTP settings for sending verification emails.
-// Defaults target Gmail SMTP with an app password -- see
-// backend/README.md for how to generate one.
+// Defaults target 163 Mail (featuremap@163.com, the same mailbox the
+// FeatureMAP web app uses) over SSL on port 465, authenticated with a 163
+// SMTP authorization code -- see backend/README.md.
 type EmailConfig struct {
 	Host        string
 	Port        string
@@ -23,8 +27,8 @@ type EmailConfig struct {
 func loadEmailConfig() EmailConfig {
 	username := os.Getenv("SMTP_USERNAME")
 	return EmailConfig{
-		Host:        getenv("SMTP_HOST", "smtp.gmail.com"),
-		Port:        getenv("SMTP_PORT", "587"),
+		Host:        getenv("SMTP_HOST", "smtp.163.com"),
+		Port:        getenv("SMTP_PORT", "465"),
 		Username:    username,
 		Password:    os.Getenv("SMTP_PASSWORD"),
 		From:        getenv("SMTP_FROM", username),
@@ -46,14 +50,12 @@ func (c EmailConfig) sendVerificationEmail(toEmail, token string) error {
 		c.From, toEmail, subject, body,
 	)
 
-	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{toEmail}, []byte(msg))
+	return c.send([]string{toEmail}, msg)
 }
 
 // contactRecipient is where messages submitted through the Contact page's
 // "Send a Message" form are delivered.
-const contactRecipient = "phenomap.shenlab@gmail.com"
+const contactRecipient = "featuremap@163.com"
 
 // sendContactMessage relays a message submitted through the Contact page to
 // contactRecipient, with Reply-To set to the submitter's address so a
@@ -69,9 +71,7 @@ func (c EmailConfig) sendContactMessage(name, fromEmail, message string) error {
 		c.From, contactRecipient, fromEmail, subject, body,
 	)
 
-	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{contactRecipient}, []byte(msg))
+	return c.send([]string{contactRecipient}, msg)
 }
 
 // sendEmailChangeVerification is sent to the *new* address someone entered
@@ -91,9 +91,7 @@ func (c EmailConfig) sendEmailChangeVerification(toEmail, token string) error {
 		c.From, toEmail, subject, body,
 	)
 
-	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{toEmail}, []byte(msg))
+	return c.send([]string{toEmail}, msg)
 }
 
 // sendAccountDeletionConfirmation is sent to the account's current email
@@ -113,9 +111,7 @@ func (c EmailConfig) sendAccountDeletionConfirmation(toEmail, token string) erro
 		c.From, toEmail, subject, body,
 	)
 
-	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{toEmail}, []byte(msg))
+	return c.send([]string{toEmail}, msg)
 }
 
 // sendCommunitySubmissionNotice emails contactRecipient whenever someone
@@ -151,9 +147,7 @@ func (c EmailConfig) sendCommunitySubmissionNotice(user *User, s *CommunitySubmi
 		c.From, contactRecipient, s.ContactEmail, subject, body,
 	)
 
-	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{contactRecipient}, []byte(msg))
+	return c.send([]string{contactRecipient}, msg)
 }
 
 func (c EmailConfig) sendPasswordResetEmail(toEmail, token string) error {
@@ -169,7 +163,57 @@ func (c EmailConfig) sendPasswordResetEmail(toEmail, token string) error {
 		c.From, toEmail, subject, body,
 	)
 
+	return c.send([]string{toEmail}, msg)
+}
+
+// send delivers msg to the given recipients. Port 465 (163 Mail's default,
+// also what FeatureMAP uses) needs implicit TLS from the first byte, which
+// smtp.SendMail can't do -- it only upgrades a plain connection with
+// STARTTLS -- so that case dials TLS itself. Any other port (587, 25) keeps
+// using smtp.SendMail's STARTTLS path.
+func (c EmailConfig) send(to []string, msg string) error {
 	auth := smtp.PlainAuth("", c.Username, c.Password, c.Host)
-	addr := c.Host + ":" + c.Port
-	return smtp.SendMail(addr, auth, c.From, []string{toEmail}, []byte(msg))
+	addr := net.JoinHostPort(c.Host, c.Port)
+	if c.Port != "465" {
+		return smtp.SendMail(addr, auth, c.From, to, []byte(msg))
+	}
+
+	dialer := &net.Dialer{Timeout: 20 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: c.Host})
+	if err != nil {
+		return err
+	}
+	// Bound the whole SMTP conversation, not just the dial, so a stalled
+	// server can't hang the caller indefinitely.
+	_ = conn.SetDeadline(time.Now().Add(60 * time.Second))
+	client, err := smtp.NewClient(conn, c.Host)
+	if err != nil {
+		conn.Close()
+		return err
+	}
+	defer client.Close()
+
+	if err := client.Auth(auth); err != nil {
+		return err
+	}
+	if err := client.Mail(c.From); err != nil {
+		return err
+	}
+	for _, rcpt := range to {
+		if err := client.Rcpt(rcpt); err != nil {
+			return err
+		}
+	}
+	w, err := client.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		w.Close()
+		return err
+	}
+	if err := w.Close(); err != nil {
+		return err
+	}
+	return client.Quit()
 }

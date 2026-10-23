@@ -10,7 +10,7 @@
       <nav class="footer-col footer-links">
         <router-link to="/">Home</router-link>
         <router-link to="/about/introduction">About</router-link>
-        <router-link to="/community">Community</router-link>
+        <router-link v-if="authState.enabled && !authState.loading" to="/community">Community</router-link>
         <router-link to="/download">Download</router-link>
       </nav>
 
@@ -32,8 +32,9 @@
 </template>
 
 <script setup>
+import { authState } from '../auth.js'
 const year = new Date().getFullYear()
-const lastUpdated = '2026-07-31'
+const lastUpdated = '2026-10-23'
 
 function scrollTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })

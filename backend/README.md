@@ -15,13 +15,14 @@ go run .
 
 You should see: `phenomap-web backend listening on :8080 (neo4j db=neo4j)`
 
-## Sign up email requires a Gmail App Password
+## Sign up email requires a 163 SMTP authorization code
 
-Verification emails are sent over Gmail SMTP. Before signup will work:
+Verification emails are sent from `featuremap@163.com` (the same mailbox the
+FeatureMAP web app uses) through `smtp.163.com:465` over SSL. Before signup will work:
 
-1. On the Google account that owns `SMTP_USERNAME`, turn on 2-Step Verification (Google Account -> Security).
-2. Google Account -> Security -> App passwords -> create one for "Mail".
-3. Put that (not your normal Gmail password) into `SMTP_PASSWORD` in `.env`.
+1. Sign in at mail.163.com -> Settings -> POP3/SMTP/IMAP, and enable the SMTP service.
+2. Copy the SMTP authorization code it gives you.
+3. Put that code (not the mailbox login password) into `SMTP_PASSWORD` in `.env`.
 
 If SMTP isn't configured yet, signup still creates the account but returns
 an error saying the email failed to send -- use `POST

@@ -238,6 +238,11 @@ const candidateCap = 500
 // per-label and summed, not across one globally-ranked list -- fine for the
 // current UI, which always searches one label at a time.
 func (db *DB) Search(ctx context.Context, q string, label string, offset, pageSize int) (results []SearchResult, total int, err error) {
+	// Start from an empty (non-nil) slice: a nil slice is encoded as JSON
+	// null, and the frontend reads results.length -- which crashed the
+	// Entity Search page and the Path Query picker into a blank page when a
+	// query had no matches for the selected type.
+	results = []SearchResult{}
 	labels := allLabels
 	if label != "" {
 		labels = []string{label}
