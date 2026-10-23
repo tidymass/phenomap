@@ -317,10 +317,15 @@ const userInitials = computed(() => {
 
 const activeSession = computed(() => sessions.value.find((s) => s.id === activeSessionId.value))
 const currentMessages = computed(() => activeSession.value?.messages || [])
-const modelSettingsKey = computed(() => {
-  const accountId = authState.user?.id || authState.user?.email || 'anonymous'
-  return `${MODEL_SETTINGS_KEY_PREFIX}:${accountId}`
-})
+const accountId = computed(() => authState.user?.id || authState.user?.email || 'anonymous')
+const modelSettingsKey = computed(() => `${MODEL_SETTINGS_KEY_PREFIX}:${accountId.value}`)
+// Chat history is kept per account. It used to live under one browser-wide
+// key, so two people signing in on the same browser saw (and added to) the
+// same chat list. sessionsStorageKey records which key the sessions
+// currently in memory were loaded from, so saving after an account switch
+// can never write one person's chats under another person's key.
+const sessionsKey = computed(() => `${STORAGE_KEY}:${accountId.value}`)
+let sessionsStorageKey = 
 
 onMounted(() => {
   loadSessions()
@@ -350,21 +355,29 @@ onMounted(() => {
 watch(
   sessions,
   () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.value))
+    if (!sessionsStorageKey) return
+    try {
+      localStorage.setItem(sessionsStorageKey, JSON.stringify(sessions.value))
+    } catch {
+      // Storage full or blocked: keep the chat working in memory.
+    }
   },
   { deep: true }
 )
 
-watch(
-  () => authState.user?.id || authState.user?.email,
-  () => {
-    loadModelSettings()
-  }
-)
+watch(accountId, () => {
+  loadModelSettings()
+  loadSessions()
+  newChat()
+})
 
 function loadSessions() {
+  sessionsStorageKey = sessionsKey.value
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    // The old browser-wide history can't be attributed to an account, so
+    // it is dropped rather than shown to whoever signs in next.
+    localStorage.removeItem(STORAGE_KEY)
+    const raw = JSON.parse(localStorage.getItem(sessionsStorageKey) || '[]')
     sessions.value = Array.isArray(raw) ? raw : []
     activeSessionId.value = sessions.value[0]?.id || ''
   } catch {
