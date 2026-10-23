@@ -7,7 +7,7 @@ through (see ../backend/chat.go).
 
 Run (from this directory):
     pip install -r requirements.txt
-    cp .env.example .env   # fill in LLM_API_KEY
+    cp .env.example .env   # optional: adjust default models
     uvicorn main:app --port 8788
 
 See README.md for details.

@@ -345,9 +345,8 @@ const tools = [
       {
         step: '02',
         heading: 'Choose model settings',
-        body: 'Open the model settings panel from the account area in the chat sidebar. You can use the official free channel when quota is available, or provide your own OpenAI-compatible provider settings for ChatGPT API or SiliconFlow.',
+        body: 'Open the model settings panel from the account area in the chat sidebar. Provide your own API key and model for SiliconFlow (the default) or ChatGPT API.',
         points: [
-          'Official free shows the remaining daily quota and does not require your own API key.',
           'ChatGPT API requires your own API key and model name.',
           'SiliconFlow requires your own API key and model name.',
           'Save changes before sending a message.',

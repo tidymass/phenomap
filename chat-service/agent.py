@@ -11,7 +11,7 @@ from __future__ import annotations
   2. _classify_intent     -- for phenomap_question only: what kind of graph
      workflow does it need, and which entities are named? Still no tools --
      this is planning, not execution.
-  3. _run_execution_native / _run_execution_manual -- the only stage that
+  3. _run_execution_native -- the only stage that
      calls tools. Generalized to run over either of two disjoint tool sets:
      PhenoMAP's graph tools (search_entities and friends, for
      phenomap_question) or the single get_product_info tool (for product).
@@ -58,9 +58,6 @@ from openai import APIConnectionError, OpenAI
 
 from config import (
     MAX_TOOL_TURNS,
-    OFFICIAL_QWEN_API_KEY,
-    OFFICIAL_QWEN_BASE_URL,
-    OFFICIAL_QWEN_MODEL,
     OPENAI_BASE_URL,
     OPENAI_MODEL,
     SILICONFLOW_BASE_URL,
@@ -69,99 +66,15 @@ from config import (
 from prompts import EXECUTION_PROMPT_TEMPLATE, INTENT_PROMPT, PRODUCT_EXECUTION_PROMPT, RELEVANCE_PROMPT
 from tools import PRODUCT_TOOL_FUNCS, PRODUCT_TOOL_SCHEMAS, TOOL_FUNCS, TOOL_SCHEMAS, BackendError
 
-# Cap on how many tool_calls from one manual-mode JSON round actually get
-# executed. Anything beyond this is skipped and the model is told exactly
-# how many were skipped (see _run_execution_manual) instead of silently
-# vanishing -- a model that planned 5 calls and only sees 3 results back,
-# with no indication 2 never ran, can end up answering as if it had
-# everything it asked for.
-MAX_MANUAL_CALLS_PER_ROUND = 6
-
-
-def _describe_tool_schema(schema: dict) -> str:
-    """Renders one TOOL_SCHEMAS entry as a human-readable signature line,
-    including its enum constraints. Generated from the same schema used in
-    native tool-calling mode (see tools.py) so the manual-mode tool catalog
-    below can never drift out of sync with reality -- previously this text
-    was a hand-written duplicate that had no mechanism keeping it in step
-    with actual parameter names/enums as tools.py evolved."""
-    fn = schema["function"]
-    params = fn.get("parameters", {})
-    props = params.get("properties", {})
-    required = set(params.get("required", []))
-    arg_bits = []
-    for pname, pspec in props.items():
-        bit = pname if pname in required else f"{pname}?"
-        if "enum" in pspec:
-            bit += f"=[{'/'.join(pspec['enum'])}]"
-        arg_bits.append(bit)
-    return f"{fn['name']}({', '.join(arg_bits)})\n   {fn['description']}"
-
-
-def _build_manual_tool_catalog(tool_schemas: list) -> str:
-    return "\n\n".join(f"{i}. {_describe_tool_schema(s)}" for i, s in enumerate(tool_schemas, start=1))
-
-
-# Stage 3 (execution) only. Just the tool catalog and the strict-JSON
-# request/response format -- all of the *behavioral* rules (entity
-# resolution, citations, truncation honesty, relationship verification) live
-# once in whichever execution prompt this gets appended to (prompts.
-# EXECUTION_PROMPT_TEMPLATE for phenomap_question, prompts.
-# PRODUCT_EXECUTION_PROMPT for product) instead of being duplicated here in a
-# second, differently-worded copy the way the old MANUAL_TOOL_PROMPT used to.
-#
-# Parametrized by tool_schemas (rather than a single module-level constant
-# built once from tools.TOOL_SCHEMAS) because official_qwen's manual mode now
-# runs over two disjoint tool sets depending on classification -- PhenoMAP's
-# graph tools for phenomap_question, or just get_product_info for product --
-# and each execution round needs the protocol text describing only the tools
-# actually available to it that turn.
-def _build_manual_tool_protocol(tool_schemas: list) -> str:
-    return f"""This model does not reliably support native OpenAI function-calling, so tool
-use is simulated through strict JSON instead of the `tools` API parameter.
-
-You have these tools -- names, arguments, and enum values below come directly from the
-same schema used in native tool-calling mode, so treat enum values as exact and case-sensitive:
-
-{_build_manual_tool_catalog(tool_schemas)}
-
-At each step, respond with STRICT JSON only, no markdown.
-
-If you need tools:
-{{
-  "tool_calls": [
-    {{"tool": "<one of the tool names above>", "args": {{...arguments matching its schema...}}}}
-  ]
-}}
-
-If you can answer:
-{{
-  "final": "your answer here"
-}}
-
-If you request more tool_calls than fit in one round, the extra ones will be skipped and reported
-back to you as skipped -- ask for them again next round if you still need them.
-"""
-
-
 class LLMConfigError(Exception):
     """Raised when a requested LLM provider is missing credentials."""
 
 
 def _resolve_llm(llm_config: dict) -> dict:
-    provider = (llm_config or {}).get("provider") or "official_qwen"
+    provider = (llm_config or {}).get("provider") or "siliconflow"
     provider = provider.strip().lower()
 
-    if provider == "official_qwen":
-        api_key = OFFICIAL_QWEN_API_KEY or "EMPTY"
-        base_url = OFFICIAL_QWEN_BASE_URL
-        model = OFFICIAL_QWEN_MODEL
-        label = "Official Qwen"
-        if not base_url:
-            raise LLMConfigError(
-                "Official Qwen is not configured on this server. Set OFFICIAL_QWEN_BASE_URL."
-            )
-    elif provider == "openai":
+    if provider == "openai":
         api_key = (llm_config or {}).get("api_key", "").strip()
         base_url = OPENAI_BASE_URL
         model = (llm_config or {}).get("model", "").strip() or OPENAI_MODEL
@@ -176,7 +89,7 @@ def _resolve_llm(llm_config: dict) -> dict:
         if not api_key:
             raise LLMConfigError("SiliconFlow mode requires an API key.")
     else:
-        raise LLMConfigError("provider must be one of official_qwen, openai, siliconflow.")
+        raise LLMConfigError("provider must be one of openai, siliconflow.")
 
     return {
         "provider": provider,
@@ -196,9 +109,8 @@ def _completion(
     resolved_llm: dict | None = None,
     tool_schemas: list | None = None,
 ):
-    # temperature=0 for every strict-JSON-emitting call (manual prompt-planned
-    # mode, and native mode's own tool_calls step, and both classification
-    # stages) -- format reliability matters more than lexical variety when
+    # temperature=0 for every strict-JSON-emitting call (native mode's own
+    # tool_calls step, and both classification stages) -- format reliability matters more than lexical variety when
     # the output has to parse cleanly, and a lower temperature measurably
     # cuts down how often _extract_json_object's fallback parsers have to
     # kick in. The final natural-language reply (no tools left to call) is
@@ -960,126 +872,8 @@ def _format_execution_prompt(classification: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-async def _run_execution_manual(
-    llm_client,
-    resolved_llm: dict,
-    user_message: str,
-    history: list[dict],
-    system_prompt: str,
-    tool_schemas: list,
-    tool_funcs: dict,
-):
-    """Manual (strict-JSON) tool-calling execution, used for official_qwen.
-
-    Generalized over `system_prompt`/`tool_schemas`/`tool_funcs` rather than
-    hardcoded to PhenoMAP's graph tools: run_chat_stream calls this with
-    EXECUTION_PROMPT_TEMPLATE + TOOL_SCHEMAS/TOOL_FUNCS for phenomap_question
-    turns, or PRODUCT_EXECUTION_PROMPT + PRODUCT_TOOL_SCHEMAS/
-    PRODUCT_TOOL_FUNCS for product turns -- this function itself has no idea
-    which one it's running and doesn't need to.
-    """
-    full_system_prompt = (
-        system_prompt + "\n\n" + _build_manual_tool_protocol(tool_schemas) + "\n\n" + _language_directive(user_message)
-    )
-    messages = [{"role": "system", "content": full_system_prompt}]
-    messages.extend(_history_messages(history))
-    messages.append({"role": "user", "content": user_message})
-
-    citations: dict = {}
-    tool_trace: list = []
-
-    async with httpx.AsyncClient() as http_client:
-        for _ in range(MAX_TOOL_TURNS):
-            response = _completion(
-                llm_client, resolved_llm["model"], messages, use_tools=False, temperature=0, resolved_llm=resolved_llm
-            )
-            content = response.choices[0].message.content or ""
-            parsed = _extract_json_object(content)
-
-            final = parsed.get("final")
-            calls = parsed.get("tool_calls") or []
-            if final and not calls:
-                yield {
-                    "type": "final",
-                    **_finalize(final, citations, tool_trace, resolved_llm, "prompt_planned", llm_client, user_message),
-                }
-                return
-
-            if not isinstance(calls, list) or not calls:
-                yield {
-                    "type": "final",
-                    **_finalize(
-                        content or "I could not produce a valid tool plan.",
-                        citations,
-                        tool_trace,
-                        resolved_llm,
-                        "prompt_planned",
-                        llm_client,
-                        user_message,
-                    ),
-                }
-                return
-
-            messages.append({"role": "assistant", "content": json.dumps(parsed, ensure_ascii=False)})
-            tool_results = []
-            run_calls, skipped = calls[:MAX_MANUAL_CALLS_PER_ROUND], calls[MAX_MANUAL_CALLS_PER_ROUND:]
-            for call in run_calls:
-                name = call.get("tool") or call.get("name")
-                args = call.get("args") or call.get("arguments") or {}
-                yield {"type": "status", "text": _status_for_tool_call(name, args)}
-                result, clean_args = await _run_manual_tool(http_client, citations, name, args, tool_funcs)
-                trace_entry = {"tool": name, "args": clean_args}
-                _annotate_search_trace(trace_entry, name, result)
-                tool_trace.append(trace_entry)
-                tool_results.append({"tool": name, "args": clean_args, "result": result})
-
-            # Same reasoning as _run_execution_native's 12000-char cap (see
-            # its comment), but this feedback string can bundle up to
-            # MAX_MANUAL_CALLS_PER_ROUND results from one round rather than
-            # just one, so it needs proportionally more headroom.
-            feedback = "Tool results JSON:\n" + json.dumps(tool_results, ensure_ascii=False)[:20000]
-            if skipped:
-                # Tell the model explicitly rather than letting it think it
-                # got everything it asked for -- see MAX_MANUAL_CALLS_PER_ROUND.
-                skipped_names = ", ".join(c.get("tool") or c.get("name") or "?" for c in skipped)
-                feedback += (
-                    f"\n\n[{len(skipped)} additional requested call(s) were skipped this round "
-                    f"({skipped_names}) -- request them again next round if still needed.]"
-                )
-            feedback += "\n\nUse these results. Return STRICT JSON again: either more tool_calls or final."
-            messages.append({"role": "user", "content": feedback})
-
-    messages.append(
-        {
-            "role": "user",
-            "content": (
-                "Return STRICT JSON with a final answer now based only on the tool results above: "
-                "{\"final\":\"...\"}"
-            ),
-        }
-    )
-    response = _completion(
-        llm_client, resolved_llm["model"], messages, use_tools=False, temperature=0, resolved_llm=resolved_llm
-    )
-    parsed = _extract_json_object(response.choices[0].message.content or "")
-    yield {
-        "type": "final",
-        **_finalize(
-            parsed.get("final") or response.choices[0].message.content or "",
-            citations,
-            tool_trace,
-            resolved_llm,
-            "prompt_planned",
-            llm_client,
-            user_message,
-        ),
-    }
-
-
 async def _stream_completion(llm_client, resolved_llm: dict, messages: list[dict], *, use_tools: bool):
-    """Runs one streaming chat completion (native tool-calling providers
-    only -- official_qwen's manual JSON-planning mode isn't touched by this;
-    see _run_execution_manual). Yields {"type": "content", "text": ...} for
+    """Runs one streaming chat completion. Yields {"type": "content", "text": ...} for
     each piece of natural-language text as it arrives, which is what lets
     the frontend show it typing out in real time instead of waiting for the
     whole answer, then exactly one {"type": "done", "content": ..., \
@@ -1264,10 +1058,13 @@ async def _run_execution_native(
 ):
     """Native tool-calling execution (openai/siliconflow).
 
-    Generalized over `system_prompt`/`tool_schemas`/`tool_funcs` the same way
-    as _run_execution_manual above -- see its docstring. run_chat_stream
-    picks which prompt/tool set to pass in based on the relevance
-    classification (phenomap_question vs. product).
+    Generalized over `system_prompt`/`tool_schemas`/`tool_funcs` rather than
+    hardcoded to PhenoMAP's graph tools: run_chat_stream calls this with
+    EXECUTION_PROMPT_TEMPLATE + TOOL_SCHEMAS/TOOL_FUNCS for phenomap_question
+    turns, or PRODUCT_EXECUTION_PROMPT + PRODUCT_TOOL_SCHEMAS/
+    PRODUCT_TOOL_FUNCS for product turns, based on the relevance
+    classification -- this function itself has no idea which one it's
+    running and doesn't need to.
 
     Tool-selection calls use native OpenAI-compatible tools, but the final
     answer is streamed through a separate no-tools writer call. This matters
@@ -1461,7 +1258,7 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
                 return
 
         # system_prompt/tool_schemas/tool_funcs are what actually get handed
-        # to stage 3 (_run_execution_manual/_run_execution_native) below --
+        # to stage 3 (_run_execution_native) below --
         # decided per branch here rather than passing a "classification"
         # dict through and having stage 3 re-derive which tool set applies.
         if effective_user_message != user_message:
@@ -1513,14 +1310,9 @@ async def run_chat_stream(user_message: str, history: list[dict], llm_config: di
                 system_prompt = _format_execution_prompt(classification)
                 tool_schemas, tool_funcs = TOOL_SCHEMAS, TOOL_FUNCS
 
-        if resolved_llm["provider"] == "official_qwen":
-            executor = _run_execution_manual(
-                llm_client, resolved_llm, effective_user_message, history, system_prompt, tool_schemas, tool_funcs
-            )
-        else:
-            executor = _run_execution_native(
-                llm_client, resolved_llm, effective_user_message, history, system_prompt, tool_schemas, tool_funcs
-            )
+        executor = _run_execution_native(
+            llm_client, resolved_llm, effective_user_message, history, system_prompt, tool_schemas, tool_funcs
+        )
         async for event in executor:
             yield event
     except RuntimeError as e:

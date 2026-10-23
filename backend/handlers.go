@@ -178,26 +178,6 @@ func handleEnrichmentMeta(client *EnrichmentClient) http.HandlerFunc {
 	}
 }
 
-// GET /api/chat/quota
-func handleChatQuota(authDB *AuthDB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		quota, err := authDB.OfficialChatQuota(ctx, sessionTokenFromRequest(r))
-		if err != nil {
-			if errors.Is(err, ErrNotFound) {
-				writeError(w, http.StatusUnauthorized, "not signed in")
-				return
-			}
-			log.Printf("chat quota error: %v", err)
-			writeError(w, http.StatusInternalServerError, "failed to load chat quota")
-			return
-		}
-		writeJSON(w, http.StatusOK, quota)
-	}
-}
-
 // POST /api/chat
 //
 // Streams the response as newline-delimited JSON (NDJSON): the Python
@@ -206,11 +186,9 @@ func handleChatQuota(authDB *AuthDB) http.HandlerFunc {
 // call plus exactly one terminal line (see chat-service/main.py). This
 // handler proxies each line to the browser as it arrives instead of
 // buffering the whole turn the way it used to, which is what lets the
-// frontend show short "thinking" hints instead of a static spinner. The one
-// place this handler still touches the payload is the terminal line: the
-// daily-quota count (computed here, not by the Python service) gets merged
-// in only there, not into every progress line.
-func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
+// frontend show short "thinking" hints instead of a static spinner. Each
+// status/token/final/error line only gets a proxy timestamp added.
+func handleChat(client *ChatClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -229,29 +207,6 @@ func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
 		// instead of one.
 		ctx, cancel := context.WithTimeout(r.Context(), 100*time.Second)
 		defer cancel()
-
-		var quota *ChatQuota
-		provider := strings.ToLower(strings.TrimSpace(req.LLM.Provider))
-		if provider == "" || provider == "official_qwen" {
-			q, allowed, err := authDB.ConsumeOfficialChatQuota(ctx, sessionTokenFromRequest(r))
-			if err != nil {
-				if errors.Is(err, ErrNotFound) {
-					writeError(w, http.StatusUnauthorized, "not signed in")
-					return
-				}
-				log.Printf("consume chat quota error: %v", err)
-				writeError(w, http.StatusInternalServerError, "failed to check chat quota")
-				return
-			}
-			quota = &q
-			if !allowed {
-				writeJSON(w, http.StatusTooManyRequests, map[string]any{
-					"error": "official free daily quota used up",
-					"quota": q,
-				})
-				return
-			}
-		}
 
 		resp, err := client.Stream(ctx, req)
 		if err != nil {
@@ -287,9 +242,6 @@ func handleChat(client *ChatClient, authDB *AuthDB) http.HandlerFunc {
 			if err := json.Unmarshal(line, &payload); err == nil {
 				if t, _ := payload["type"].(string); t == "status" || t == "token" || t == "final" || t == "error" {
 					payload["proxy_time"] = float64(time.Now().UnixNano()) / 1e9
-					if quota != nil && (t == "final" || t == "error") {
-						payload["quota"] = *quota
-					}
 					if reEncoded, err := json.Marshal(payload); err == nil {
 						out = reEncoded
 					}

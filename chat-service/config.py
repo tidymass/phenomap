@@ -18,15 +18,9 @@ load_dotenv()
 # what "PhenoMAP knowledge" means.
 BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8080").rstrip("/")
 
-# Official free model endpoint used by "Official Qwen" mode. These
-# credentials stay on the server; users never see or provide them. The
-# endpoint only needs to be OpenAI-compatible.
-OFFICIAL_QWEN_API_KEY = os.getenv("OFFICIAL_QWEN_API_KEY", os.getenv("LLM_API_KEY", ""))
-OFFICIAL_QWEN_BASE_URL = os.getenv("OFFICIAL_QWEN_BASE_URL", os.getenv("LLM_BASE_URL", ""))
-OFFICIAL_QWEN_MODEL = os.getenv("OFFICIAL_QWEN_MODEL", os.getenv("LLM_MODEL", "qwen-plus"))
-
-# Defaults for user-supplied providers. A user API key is still required for
-# these modes; these defaults just save them from typing the base URL/model.
+# Defaults for the user-supplied providers. Every chat turn uses the user's own
+# API key (there is no server-side model any more); these defaults just save
+# them from typing the base URL/model. SiliconFlow is the default provider.
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")

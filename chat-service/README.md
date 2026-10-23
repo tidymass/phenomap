@@ -32,25 +32,22 @@ won't hydrate it into a link pointing at a real (or worse, wrong) page.
 
 ## LLM modes
 
-PhenoMAP Chat supports three OpenAI-compatible model modes:
+PhenoMAP Chat supports two OpenAI-compatible model modes. Both use the
+user's own API key, entered in the UI; the server holds no model credentials.
 
-- `official_qwen`: free model endpoint deployed by PhenoMAP. Configure
-  `OFFICIAL_QWEN_API_KEY`, `OFFICIAL_QWEN_BASE_URL`, and
-  `OFFICIAL_QWEN_MODEL` in this service's `.env`. The browser never sees the
-  official key.
-- `openai`: user supplies their own ChatGPT/OpenAI API key in the UI. Default
-  base URL/model come from `OPENAI_BASE_URL` and `OPENAI_MODEL`.
-- `siliconflow`: user supplies their own SiliconFlow API key in the UI.
+- `siliconflow` (default): user supplies their own SiliconFlow API key in the UI.
   Default base URL/model come from `SILICONFLOW_BASE_URL` and
   `SILICONFLOW_MODEL`.
+- `openai`: user supplies their own ChatGPT/OpenAI API key in the UI. Default
+  base URL/model come from `OPENAI_BASE_URL` and `OPENAI_MODEL`.
 
-All three modes use the exact same PhenoMAP tools and citation rules.
+Both modes use the exact same PhenoMAP tools and citation rules.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # fill in official Qwen settings for free mode
+cp .env.example .env   # adjust defaults if needed; no server-side API key
 ```
 
 ## Run
@@ -74,7 +71,7 @@ The Go backend calls this service at `CHAT_SERVICE_URL` (default
   ```json
   {
     "message": "Which modules are associated with gout?",
-    "llm": { "provider": "official_qwen" },
+    "llm": { "provider": "siliconflow", "api_key": "sk-...", "model": "deepseek-ai/DeepSeek-V3.2" },
     "history": [
       { "role": "user", "content": "..." },
       { "role": "assistant", "content": "..." }

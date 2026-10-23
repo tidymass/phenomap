@@ -1,48 +1,147 @@
 {
   "_comment": "Single source of truth for PhenoMAP's own product information. The five About pages (frontend/src/views/about/*.vue) render from this file, and the chat-service's PRODUCT_FACTS (chat-service/prompts.py, loaded via chat-service/product_facts.py) is generated from this same file -- so PhenoMAP Chat's answers about PhenoMAP itself can never drift from what the site actually shows. Edit this file, not the .vue files or prompts.py, when this information changes.",
-
   "identity": {
     "chatbot_name": "PhenoMAP Chat",
     "main_job": "help users explore PhenoMAP's phenotype-metabolite-module knowledge graph through entity lookup, graph relationship retrieval, path queries, module enrichment, and evidence-linked summaries"
   },
-
   "introduction": {
-    "hero_tagline": "PhenoMAP organizes public human metabolomics studies into a searchable, phenotype-centered knowledge graph.",
-    "overview_heading": "A Queryable Graph For Metabolic Modules.",
+    "hero_tagline": "PhenoMAP is a phenotype-aware metabolic module atlas: it brings dysregulated metabolic modules from public human metabolomics studies, ontology-normalized phenotypes, and their metabolites together in one searchable knowledge graph.",
+    "overview_heading": "Comparing metabolic dysregulation across studies at module scale.",
     "overview_paragraphs": [
-      "PhenoMAP organizes dysregulated metabolic modules across public human metabolomics studies into a single queryable graph.",
-      "FeatureMAP outputs and Metabolomics Workbench metadata are transformed into Study, Phenotype, Module, and Metabolite nodes, with relationships that preserve study context, phenotype labels, module membership, and cross-study module similarity.",
-      "The Go API serves search, path, and enrichment queries against Neo4j. The enrichment endpoint calls back into the original R analysis function directly, so the statistical method is not reimplemented in the web layer."
+      "Untargeted LC-MS features vary with analytical platforms and processing workflows, so they are hard to compare between studies. Dysregulated metabolic modules identified by FeatureMAP capture biochemical relationships that can be shared across datasets, which makes them a practical common unit for comparing metabolic alterations across heterogeneous studies.",
+      "PhenoMAP applies a standardized TidyMass-FeatureMAP workflow to public human untargeted LC-MS metabolomics studies and links every resulting module to the study it came from, the phenotype that study investigated, and the metabolites that define it. Users can start from a phenotype, a study accession, a module, or a metabolite and follow the graph to related evidence in other studies."
     ],
     "graph_structure": [
-      { "label": "Entities", "value": "Study, Phenotype, Module, and Metabolite" },
-      { "label": "Relationships", "value": "Study context, phenotype links, module membership, and similarity edges" },
-      { "label": "Graph Store", "value": "Neo4j knowledge graph served through the PhenoMAP API" }
+      {
+        "label": "Entities",
+        "value": "Study, Phenotype, Module, and Metabolite"
+      },
+      {
+        "label": "Relationships",
+        "value": "investigated, reported in, member of (core / supporting / contextual), connected with, and similar to"
+      },
+      {
+        "label": "Graph Store",
+        "value": "Neo4j knowledge graph served through the PhenoMAP API"
+      }
     ],
     "pipeline_steps": [
       {
         "number": "01",
-        "title": "Prepare Raw Data",
-        "body": "Metabolomics Workbench metadata and per-study FeatureMAP outputs are standardized before graph construction."
+        "title": "Curate Public Studies",
+        "body": "Human untargeted LC-MS studies from Metabolomics Workbench and MetaboLights are included when they provide MS1-level raw data and sample metadata that define group comparisons. MS/MS spectra are used when available but are not required. Multi-group designs are split into pairwise comparisons against a reference group."
       },
       {
         "number": "02",
-        "title": "Tidy Entities",
-        "body": "Studies, phenotypes, modules, and metabolites are normalized into graph-ready node tables."
+        "title": "Generate Modules",
+        "body": "Raw data are processed with the TidyMass pipeline, differential analysis is run for each comparison, and dysregulated modules are identified with FeatureMAP and annotated in fast mode (Qwen3.5-122B-A10B). Studies yielding at least one dysregulated module are retained, giving 501 studies."
       },
       {
         "number": "03",
-        "title": "Build Relationships",
-        "body": "Relationship tables connect studies, phenotypes, modules, and metabolites, including cross-study module similarity."
+        "title": "Normalize Phenotypes",
+        "body": "An LLM-assisted workflow (GPT-4.1) extracts the principal phenotype from each study description, assigns it to one of nine categories, and maps it to category-specific ontology terms. Ambiguous, missing, or biologically inconsistent mappings are reviewed manually, giving 326 standardized phenotypes."
       },
       {
         "number": "04",
-        "title": "Serve Analysis",
-        "body": "The web interface queries Neo4j through the Go API for entity search, path query, and module enrichment."
+        "title": "Build The Graph",
+        "body": "Studies, phenotypes, modules, and metabolites are loaded into Neo4j with their relationships, including module-to-module similarity edges for cross-study comparison."
+      }
+    ],
+    "phenotype_categories": [
+      "disease",
+      "symptom",
+      "intervention",
+      "chemical",
+      "exposure",
+      "trait",
+      "cell type/line",
+      "genetic perturbation",
+      "biological process"
+    ],
+    "node_types": [
+      {
+        "title": "Study",
+        "body": "A public metabolomics study, keeping its repository provenance (Metabolomics Workbench or MetaboLights accession) and experimental context."
+      },
+      {
+        "title": "Phenotype",
+        "body": "An ontology-normalized biological or clinical variable assigned to one of nine categories."
+      },
+      {
+        "title": "Module",
+        "body": "A FeatureMAP-derived dysregulated metabolic module, with its structured functional annotation."
+      },
+      {
+        "title": "Metabolite",
+        "body": "A metabolite in the human metabolic reaction network (MRN) used by FeatureMAP."
+      }
+    ],
+    "relationships": [
+      {
+        "title": "investigated",
+        "body": "Connects a study to the phenotype it investigated."
+      },
+      {
+        "title": "reported in",
+        "body": "Connects a module to the study in which it was identified."
+      },
+      {
+        "title": "member of",
+        "body": "Connects a metabolite to a module, labeled core (anchor metabolites), supporting (other prioritized metabolites), or contextual (remaining module metabolites)."
+      },
+      {
+        "title": "connected with",
+        "body": "Connects two metabolites linked by a reaction in the metabolic reaction network."
+      },
+      {
+        "title": "similar to",
+        "body": "Connects two modules whose similarity score is at least 0.7. The score combines the similarity of their functional annotations with the overlap of member metabolites, chemical classes, and pathway coverage."
+      }
+    ],
+    "analysis_functions": [
+      {
+        "title": "Entity Search",
+        "body": "Find studies, phenotypes, modules, and metabolites by name, keyword, external database identifier, or stable PhenoMAP identifier. Each result opens a node-detail page with its properties and neighboring records."
+      },
+      {
+        "title": "Path Query",
+        "body": "Find how two entities are connected. The query returns the study, phenotype, and module nodes on all paths up to a user-defined maximum length."
+      },
+      {
+        "title": "Module Enrichment",
+        "body": "Test whether a metabolite list obtained outside FeatureMAP, such as differential metabolites from annotated untargeted data or a targeted assay, is over-represented in PhenoMAP modules, without reanalyzing feature-level data. Each module is represented by its core and supporting metabolites, the background is their union across all modules, and significance is assessed with a one-sided hypergeometric test with Benjamini-Hochberg correction. By default, modules with FDR < 0.05 and at least two overlapping metabolites are reported."
+      },
+      {
+        "title": "PhenoMAP Chat",
+        "body": "Ask questions in natural language. Each question is assigned to a query type, the matching PhenoMAP function is called, and the answer is written from the returned records, with every cited study, phenotype, module, and metabolite linked to its PhenoMAP identifier. Chat runs on your own SiliconFlow or OpenAI API key."
+      },
+      {
+        "title": "Community Submission",
+        "body": "Submit your own study. Submissions are reviewed and processed through the same pipeline before being included in a future release, and submitted files are stored separately from the public graph."
+      }
+    ],
+    "data_access": [
+      "The graph can be explored on this website and downloaded as flat graph tables for reuse. It is stored in Neo4j; entity search, node detail, path query, and graph summary are served by a Go backend API; module enrichment runs in an R Plumber service that calls the original FeatureMAP analysis function; and PhenoMAP Chat is a Python FastAPI service that uses the same graph and enrichment APIs. The interface is built with Vue 3 and Vite."
+    ],
+    "resources": [
+      {
+        "label": "PhenoMAP source code",
+        "url": "https://github.com/tidymass/phenomap"
+      },
+      {
+        "label": "FeatureMAP R package",
+        "url": "https://github.com/tidymass/featuremap"
+      },
+      {
+        "label": "FeatureMAP web app",
+        "url": "https://featuremap.jaspershenlab.com"
+      },
+      {
+        "label": "FeatureMAP tutorial",
+        "url": "https://www.tidymass.org/featuremap_tutorial"
       }
     ]
   },
-
   "chatbot_mechanism": {
     "heading": "How PhenoMAP Chat works",
     "paragraphs": [
@@ -50,57 +149,163 @@
       "For questions about PhenoMAP Chat or the PhenoMAP project itself, it does not call those tools -- it answers directly from PhenoMAP's own published product information (this same data)."
     ]
   },
-
   "authors": {
     "intro": "PhenoMAP is developed by researchers at Lee Kong Chian School of Medicine, Nanyang Technological University.",
     "faculty": [
-      { "slug": "xiaotao-shen", "name": "Xiaotao Shen", "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU", "email": "xiaotao.shen@ntu.edu.sg" },
-      { "slug": "chuchu-wang", "name": "Chuchu Wang", "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU", "email": "chuchu.wang@ntu.edu.sg" }
+      {
+        "slug": "xiaotao-shen",
+        "name": "Xiaotao Shen",
+        "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU",
+        "email": "xiaotao.shen@ntu.edu.sg"
+      },
+      {
+        "slug": "chuchu-wang",
+        "name": "Chuchu Wang",
+        "role": "Assistant Professor, Lee Kong Chian School of Medicine, NTU",
+        "email": "chuchu.wang@ntu.edu.sg"
+      }
     ],
     "students": [
-      { "slug": "yuting-wang", "name": "Yuting Wang", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "yuting012@e.ntu.edu.sg" },
-      { "slug": "feifan-zhang", "name": "Feifan Zhang", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "feifan004@e.ntu.edu.sg" },
-      { "slug": "yijiang-liu", "name": "Yijiang Liu", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "liuy0292@e.ntu.edu.sg" },
-      { "slug": "jiramet-kinchagawat", "name": "Jiramet Kinchagawat", "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU", "email": "jiramet001@e.ntu.edu.sg" }
+      {
+        "slug": "yuting-wang",
+        "name": "Yuting Wang",
+        "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU",
+        "email": "yuting012@e.ntu.edu.sg"
+      },
+      {
+        "slug": "feifan-zhang",
+        "name": "Feifan Zhang",
+        "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU",
+        "email": "feifan004@e.ntu.edu.sg"
+      },
+      {
+        "slug": "yijiang-liu",
+        "name": "Yijiang Liu",
+        "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU",
+        "email": "liuy0292@e.ntu.edu.sg"
+      },
+      {
+        "slug": "jiramet-kinchagawat",
+        "name": "Jiramet Kinchagawat",
+        "role": "PhD Candidate, Lee Kong Chian School of Medicine, NTU",
+        "email": "jiramet001@e.ntu.edu.sg"
+      }
     ]
   },
-
   "citation": {
-    "intro": "Please cite the PhenoMAP manuscript when using the resource, graph data, or analysis workflows.",
-    "manuscript_title": "FeatureMAP enables unbiased discovery and interpretation of dysregulated metabolic modules from untargeted metabolomics",
+    "intro": "Please cite the FeatureMAP and PhenoMAP manuscript when using the resource, graph data, or analysis workflows.",
+    "manuscript_title": "FeatureMAP enables network-guided interpretation of untargeted metabolomics",
     "authors": [
-      { "name": "Yuting Wang", "mark": "equal" },
-      { "name": "Feifan Zhang", "mark": "equal" },
-      { "name": "Yijiang Liu", "mark": null },
-      { "name": "Jiramet Kinchagawat", "mark": null },
-      { "name": "Chuchu Wang", "mark": null },
-      { "name": "Xiaotao Shen", "mark": "corresponding" }
+      {
+        "name": "Yuting Wang",
+        "mark": "equal"
+      },
+      {
+        "name": "Feifan Zhang",
+        "mark": "equal"
+      },
+      {
+        "name": "Guoping Peng",
+        "mark": null
+      },
+      {
+        "name": "Lifeng Qiu",
+        "mark": null
+      },
+      {
+        "name": "Zeng Li",
+        "mark": null
+      },
+      {
+        "name": "Yijiang Liu",
+        "mark": null
+      },
+      {
+        "name": "Jiramet Kinchagawat",
+        "mark": null
+      },
+      {
+        "name": "Xicheng Yang",
+        "mark": null
+      },
+      {
+        "name": "Chang Liu",
+        "mark": null
+      },
+      {
+        "name": "Caroline Johnson",
+        "mark": null
+      },
+      {
+        "name": "Qi Su",
+        "mark": null
+      },
+      {
+        "name": "Chuchu Wang",
+        "mark": null
+      },
+      {
+        "name": "Xiaotao Shen",
+        "mark": "corresponding"
+      }
     ],
     "metadata": [
-      { "label": "Journal", "value": "To be added" },
-      { "label": "Year", "value": "To be added" },
-      { "label": "DOI", "value": "To be added" }
+      {
+        "label": "Journal",
+        "value": "To be added"
+      },
+      {
+        "label": "Year",
+        "value": "To be added"
+      },
+      {
+        "label": "DOI",
+        "value": "To be added"
+      }
     ],
     "note": "Future PhenoMAP-related publications will be added to this page when available."
   },
-
   "version": {
-    "current_version": "v0.1.0-dev",
-    "release_date": "2026-07-31",
+    "current_version": "v1.0",
+    "release_date": "2026-10-23",
     "graph_scope": [
-      { "label": "Studies", "value": "501" },
-      { "label": "Phenotypes", "value": "326" },
-      { "label": "Modules", "value": "12,929" },
-      { "label": "Metabolites", "value": "9,730" }
+      {
+        "label": "Studies",
+        "value": "501"
+      },
+      {
+        "label": "Phenotypes",
+        "value": "326"
+      },
+      {
+        "label": "Modules",
+        "value": "12,929"
+      },
+      {
+        "label": "Metabolites",
+        "value": "9,730"
+      }
     ],
     "release_notes": [
-      { "title": "Initial PhenoMAP release", "body": "First public development build of the PhenoMAP knowledge graph and web interface." },
-      { "title": "Graph-backed exploration", "body": "Includes searchable Study, Phenotype, Module, and Metabolite entities with relationship-level browsing." },
-      { "title": "Analysis workflows", "body": "Supports entity search, endpoint path query, and module enrichment workflows against the current graph scope." }
+      {
+        "title": "Initial PhenoMAP release",
+        "body": "First public release of the PhenoMAP knowledge graph and web interface, covering 501 studies, 326 phenotypes in nine categories, 12,929 dysregulated modules, and 9,730 metabolites."
+      },
+      {
+        "title": "Graph-backed exploration",
+        "body": "Searchable Study, Phenotype, Module, and Metabolite entities with relationship-level browsing and module similarity edges."
+      },
+      {
+        "title": "Analysis workflows",
+        "body": "Entity search, path query, module enrichment, and PhenoMAP Chat (with your own API key) against the current graph."
+      },
+      {
+        "title": "Community submissions",
+        "body": "User-contributed studies are reviewed and processed through the same pipeline before inclusion in future releases."
+      }
     ],
     "note": "Future PhenoMAP release updates will be added to this page when available."
   },
-
   "contact": {
     "intro": "Questions about data, methods, collaboration, or access can be sent directly to the project team.",
     "form_intro": "Use this form for dataset questions, technical issues, and collaboration requests.",

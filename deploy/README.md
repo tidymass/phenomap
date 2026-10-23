@@ -17,7 +17,7 @@
         │             ── /api/*
         ├── bolt 127.0.0.1:7687 ──→ Neo4j (+APOC 插件)
         ├── HTTP 127.0.0.1:8797 ──→ R plumber 富集服务
-        └── HTTP 127.0.0.1:8798 ──→ Python chat-service ──→ Qwen 推理服务
+        └── HTTP 127.0.0.1:8798 ──→ Python chat-service ──→ 用户自己的 SiliconFlow / OpenAI API
 ```
 
 前后端同源带来两个好处：不再需要 CORS 例外，登录的 session cookie 也不存在
@@ -102,7 +102,7 @@ crontab -e
 | 网页开了但搜不到东西 | Neo4j 是否 online：`opt/neo4j/logs/neo4j.log`；是否导入过数据 |
 | Path Query 报 `Unknown function 'apoc.path.expandConfig'` | APOC 插件没装上或没重启，看 `opt/neo4j/plugins/` |
 | Module Enrichment 报错 | `logs/enrich.log`；确认 `src/neo4j/import` 存在 |
-| Q&A 报连不上模型 | Qwen 推理服务没起，或 `OFFICIAL_QWEN_BASE_URL` 配错 |
+| Q&A 报连不上模型 | 用户的 API key 或模型名不对；或服务器连不上 `SILICONFLOW_BASE_URL` / `OPENAI_BASE_URL` |
 | 注册收不到验证邮件 | `logs/web.log` 里的 SMTP 报错；确认用的是 Gmail 应用专用密码 |
 
 端口冲突要注意：这台机器上 `8080` 已被别的服务占用，`8787` 是 RStudio Server，

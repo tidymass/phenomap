@@ -72,17 +72,7 @@
               <small>{{ opt.description }}</small>
             </button>
 
-            <div v-if="provider === opt.value && opt.value === 'official_qwen'" class="quota-panel">
-              <div class="quota-copy">
-                <span>Daily free quota</span>
-                <strong>{{ officialQuotaRemaining }} / {{ OFFICIAL_FREE_DAILY_LIMIT }} left</strong>
-              </div>
-              <div class="quota-track" aria-hidden="true">
-                <span :style="{ width: `${officialQuotaPercent}%` }"></span>
-              </div>
-            </div>
-
-            <div v-if="provider === opt.value && opt.value !== 'official_qwen'" class="provider-fields">
+            <div v-if="provider === opt.value" class="provider-fields">
               <input
                 v-model="providerDrafts[opt.value].apiKey"
                 type="password"
@@ -260,7 +250,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-import { getChatQuota, postChat } from '../api.js'
+import { postChat } from '../api.js'
 import { authState } from '../auth.js'
 
 const route = useRoute()
@@ -268,8 +258,6 @@ const router = useRouter()
 
 const STORAGE_KEY = 'phenomap_chatbot_sessions_v1'
 const MODEL_SETTINGS_KEY_PREFIX = 'phenomap_chatbot_model_settings_v1'
-const OFFICIAL_QUOTA_KEY_PREFIX = 'phenomap_chatbot_official_quota_v1'
-const OFFICIAL_FREE_DAILY_LIMIT = 50
 
 const sessions = ref([])
 const activeSessionId = ref('')
@@ -282,16 +270,14 @@ const inputRef = ref(null)
 const modelMenuOpen = ref(false)
 const modelSaveStatus = ref('')
 const modelSaveStatusType = ref('success')
-const provider = ref('official_qwen')
+const provider = ref('siliconflow')
 const providerDrafts = ref({
   openai: { apiKey: '', model: '' },
   siliconflow: { apiKey: '', model: '' },
 })
-const savedProvider = ref('official_qwen')
+const savedProvider = ref('siliconflow')
 const savedApiKey = ref('')
 const savedModel = ref('')
-const officialQuota = ref({ date: todayKey(), used: 0 })
-const officialQuotaSynced = ref(false)
 const copiedIndex = ref(null)
 // Short "thinking" hint shown in place of the old static 3-dot spinner --
 // updated as the backend streams progress through its pipeline (relevance
@@ -302,9 +288,8 @@ let copiedTimer = null
 let activeAbortController = null
 
 const providerOptions = [
-  { value: 'official_qwen', label: 'Official free', description: 'PhenoMAP Qwen' },
-  { value: 'openai', label: 'ChatGPT API', description: 'Use your key' },
   { value: 'siliconflow', label: 'SiliconFlow', description: 'Use your key' },
+  { value: 'openai', label: 'ChatGPT API', description: 'Use your key' },
 ]
 
 const starterPrompts = [
@@ -316,7 +301,6 @@ const starterPrompts = [
 ]
 
 const modelLabel = computed(() => {
-  if (savedProvider.value === 'official_qwen') return 'Official free'
   if (savedProvider.value === 'openai') return 'ChatGPT API'
   return 'SiliconFlow'
 })
@@ -337,18 +321,10 @@ const modelSettingsKey = computed(() => {
   const accountId = authState.user?.id || authState.user?.email || 'anonymous'
   return `${MODEL_SETTINGS_KEY_PREFIX}:${accountId}`
 })
-const officialQuotaKey = computed(() => {
-  const accountId = authState.user?.id || authState.user?.email || 'anonymous'
-  return `${OFFICIAL_QUOTA_KEY_PREFIX}:${accountId}`
-})
-const officialQuotaUsed = computed(() => (officialQuota.value.date === todayKey() ? officialQuota.value.used : 0))
-const officialQuotaRemaining = computed(() => Math.max(0, OFFICIAL_FREE_DAILY_LIMIT - officialQuotaUsed.value))
-const officialQuotaPercent = computed(() => Math.min(100, Math.round((officialQuotaRemaining.value / OFFICIAL_FREE_DAILY_LIMIT) * 100)))
 
 onMounted(() => {
   loadSessions()
   loadModelSettings()
-  loadOfficialQuota()
 
   // Coming back from an entity page's "Back to PhenoMAP Chat" link (see
   // nodeRoute() below, which stamps the current session id onto that link)
@@ -383,7 +359,6 @@ watch(
   () => authState.user?.id || authState.user?.email,
   () => {
     loadModelSettings()
-    loadOfficialQuota()
   }
 )
 
@@ -440,19 +415,17 @@ function saveModelSettings() {
   const nextApiKey = draft.apiKey.trim()
   const nextModel = draft.model.trim()
 
-  if (nextProvider !== 'official_qwen') {
-    if (!nextApiKey && !nextModel) {
-      setModelSaveStatus('API key and model are required', 'error')
-      return
-    }
-    if (!nextApiKey) {
-      setModelSaveStatus('API key is required', 'error')
-      return
-    }
-    if (!nextModel) {
-      setModelSaveStatus('Model is required', 'error')
-      return
-    }
+  if (!nextApiKey && !nextModel) {
+    setModelSaveStatus('API key and model are required', 'error')
+    return
+  }
+  if (!nextApiKey) {
+    setModelSaveStatus('API key is required', 'error')
+    return
+  }
+  if (!nextModel) {
+    setModelSaveStatus('Model is required', 'error')
+    return
   }
 
   savedProvider.value = provider.value
@@ -486,9 +459,11 @@ function loadModelSettings() {
     settings = null
   }
 
-  const nextProvider = ['official_qwen', 'openai', 'siliconflow'].includes(settings?.provider)
+  // Settings saved while "Official free" still existed fall back to the
+  // default (SiliconFlow) here.
+  const nextProvider = ['openai', 'siliconflow'].includes(settings?.provider)
     ? settings.provider
-    : 'official_qwen'
+    : 'siliconflow'
   const drafts = {
     openai: {
       apiKey: typeof settings?.drafts?.openai?.apiKey === 'string' ? settings.drafts.openai.apiKey : '',
@@ -501,12 +476,12 @@ function loadModelSettings() {
   }
   const legacyApiKey = typeof settings?.api_key === 'string' ? settings.api_key : ''
   const legacyModel = typeof settings?.model === 'string' ? settings.model : ''
-  if (nextProvider === 'openai' || nextProvider === 'siliconflow') {
+  if (settings?.provider === nextProvider) {
     drafts[nextProvider].apiKey ||= legacyApiKey
     drafts[nextProvider].model ||= legacyModel
   }
-  const nextApiKey = nextProvider === 'official_qwen' ? '' : drafts[nextProvider].apiKey
-  const nextModel = nextProvider === 'official_qwen' ? '' : drafts[nextProvider].model
+  const nextApiKey = drafts[nextProvider].apiKey
+  const nextModel = drafts[nextProvider].model
 
   provider.value = nextProvider
   providerDrafts.value = drafts
@@ -515,56 +490,6 @@ function loadModelSettings() {
   savedModel.value = nextModel
   modelSaveStatus.value = ''
   modelSaveStatusType.value = 'success'
-}
-
-function todayKey() {
-  const d = new Date()
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
-function normalizedOfficialQuota() {
-  const today = todayKey()
-  if (officialQuota.value.date !== today) {
-    officialQuota.value = { date: today, used: 0 }
-    persistOfficialQuota()
-  }
-  return officialQuota.value
-}
-
-function loadOfficialQuota() {
-  officialQuotaSynced.value = false
-  let quota = null
-  try {
-    quota = JSON.parse(localStorage.getItem(officialQuotaKey.value) || 'null')
-  } catch {
-    quota = null
-  }
-  applyOfficialQuota(quota)
-  normalizedOfficialQuota()
-  getChatQuota()
-    .then((serverQuota) => {
-      applyOfficialQuota(serverQuota)
-      persistOfficialQuota()
-      officialQuotaSynced.value = true
-    })
-    .catch(() => {
-      // The cached local value keeps the UI usable when the backend is not
-      // reachable yet; the backend still owns the real quota enforcement.
-    })
-}
-
-function applyOfficialQuota(quota) {
-  officialQuota.value = {
-    date: typeof quota?.date === 'string' ? quota.date : todayKey(),
-    used: Number.isFinite(Number(quota?.used)) ? Math.max(0, Number(quota.used)) : 0,
-  }
-}
-
-function persistOfficialQuota() {
-  localStorage.setItem(officialQuotaKey.value, JSON.stringify(officialQuota.value))
 }
 
 function setModelSaveStatus(message, type = 'success') {
@@ -585,9 +510,9 @@ async function scrollToBottom() {
 async function sendMessage(preset) {
   const text = (preset ?? input.value).trim()
   if (!text || loading.value || !activeSession.value) return
-  normalizedOfficialQuota()
-  if (savedProvider.value === 'official_qwen' && officialQuotaSynced.value && officialQuotaRemaining.value <= 0) {
-    error.value = 'Official free daily quota used up. Please switch to ChatGPT API or SiliconFlow, or try again tomorrow.'
+  if (!savedApiKey.value || !savedModel.value) {
+    error.value = 'Please open Model settings and save your SiliconFlow or ChatGPT API key and model first.'
+    modelMenuOpen.value = true
     return
   }
 
@@ -653,11 +578,6 @@ async function sendMessage(preset) {
         }
       },
     })
-    if (res.quota) {
-      applyOfficialQuota(res.quota)
-      persistOfficialQuota()
-      officialQuotaSynced.value = true
-    }
     const assistantMsg = currentAssistant()
     if (!assistantMsg) return
     patchAssistant({
@@ -691,11 +611,6 @@ async function sendMessage(preset) {
         session.messages.pop()
       } else if (assistantMsg?.role === 'assistant' && assistantMsg.streaming) {
         assistantMsg.streaming = false
-      }
-      if (e.quota) {
-        applyOfficialQuota(e.quota)
-        persistOfficialQuota()
-        officialQuotaSynced.value = true
       }
       error.value = e.message || 'Something went wrong talking to PhenoMAP Chat.'
     }
@@ -763,12 +678,11 @@ async function regenerateFrom(i) {
 }
 
 function llmPayload() {
-  const payload = { provider: savedProvider.value }
-  if (savedProvider.value !== 'official_qwen') {
-    payload.api_key = savedApiKey.value
-    payload.model = savedModel.value
+  return {
+    provider: savedProvider.value,
+    api_key: savedApiKey.value,
+    model: savedModel.value,
   }
-  return payload
 }
 
 function modelDocsUrl(providerValue) {
@@ -1194,37 +1108,6 @@ function hideBrokenImage(event) {
 }
 .model-option small {
   color: #737b8c;
-}
-.quota-panel {
-  display: grid;
-  gap: 7px;
-  padding: 0 9px 8px;
-}
-.quota-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #737b8c;
-  font-size: 11px;
-  font-weight: 800;
-}
-.quota-copy strong {
-  color: #0f7c96;
-  font-size: 11px;
-}
-.quota-track {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #e7eaf3;
-}
-.quota-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #0f7c96, #245c7e);
-  transition: width 160ms ease;
 }
 .provider-fields {
   display: grid;

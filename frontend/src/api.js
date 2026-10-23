@@ -8,9 +8,7 @@ async function getJSON(path, opts = {}) {
   const res = await fetch(`${BASE_URL}${path}`, { credentials: 'include', signal: opts.signal })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    const err = new Error(body.error || `Request failed: ${res.status}`)
-    if (body.quota) err.quota = body.quota
-    throw err
+    throw new Error(body.error || `Request failed: ${res.status}`)
   }
   return res.json()
 }
@@ -104,10 +102,6 @@ export function getGraphOverview() {
   return getJSON('/api/graph/overview')
 }
 
-export function getChatQuota() {
-  return getJSON('/api/chat/quota')
-}
-
 export function downloadUrl(filename) {
   return `${BASE_URL}/api/download/${encodeURIComponent(filename)}`
 }
@@ -175,11 +169,7 @@ export async function submitCommunityStudy(formData) {
 // (relevance check, intent classification, execution) and streams
 // newline-delimited JSON: zero or more {type:"status", text} progress lines
 // while it works, zero or more {type:"token", text} pieces of the final
-// answer as the model actually generates them (openai/siliconflow only --
-// official_qwen's manual JSON-planning mode has no token events and jumps
-// straight from status lines to the terminal line, since its final answer
-// only ever arrives already wrapped in a JSON string, not as it's produced),
-// followed by exactly one terminal line, either {type:"final", reply,
+// answer as the model actually generates them, followed by exactly one terminal line, either {type:"final", reply,
 // citations, tool_calls, provider, tool_mode, ...} or {type:"error",
 // message}. opts.onEvent(event), if given, is called for every status/token
 // event as it arrives -- this is what lets the UI show short "thinking"
@@ -202,14 +192,12 @@ export async function postChat(message, history = [], llm = {}, opts = {}) {
   })
 
   if (!res.ok) {
-    // Some failures (quota exceeded, bad request, not signed in) are still
+    // Some failures (bad request, not signed in) are still
     // a single non-streamed JSON error response returned before any
     // pipeline stage runs -- handled exactly like the old blocking postJSON
     // did.
     const body = await res.json().catch(() => ({}))
-    const err = new Error(body.error || `Request failed: ${res.status}`)
-    if (body.quota) err.quota = body.quota
-    throw err
+    throw new Error(body.error || `Request failed: ${res.status}`)
   }
 
   if (!res.body) {
@@ -242,9 +230,7 @@ export async function postChat(message, history = [], llm = {}, opts = {}) {
     }
     if (event.type === 'final') return event
     if (event.type === 'error') {
-      const err = new Error(event.message || 'chat agent failed')
-      if (event.quota) err.quota = event.quota
-      throw err
+      throw new Error(event.message || 'chat agent failed')
     }
     return undefined
   }

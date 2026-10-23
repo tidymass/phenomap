@@ -25,10 +25,9 @@ type ChatRequest struct {
 }
 
 // ChatLLMConfig selects which OpenAI-compatible LLM endpoint the Python
-// chat-service should use for this turn. For provider=official_qwen, API
-// credentials live only in the chat-service environment. For openai and
-// siliconflow, the user can pass a key for this request; the backend only
-// proxies it and never persists it.
+// chat-service should use for this turn (provider "siliconflow", the
+// default, or "openai"). The user passes their own key for this request;
+// the backend only proxies it and never persists it.
 type ChatLLMConfig struct {
 	Provider string `json:"provider"`
 	APIKey   string `json:"api_key,omitempty"`

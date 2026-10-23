@@ -18,7 +18,7 @@
           </router-link>
         </nav>
         <h1>About PhenoMAP</h1>
-        <p>{{ facts.introduction.hero_tagline }}</p>
+        <p>{{ intro.hero_tagline }}</p>
       </div>
     </section>
 
@@ -36,72 +36,62 @@
       <article class="about-article">
         <section id="overview" class="article-section">
           <p class="section-kicker">Resource Overview</p>
-          <h2>A phenotype-centered resource for interpreting metabolomics studies at module scale.</h2>
-          <p>
-            PhenoMAP organizes public human metabolomics studies into a searchable knowledge graph. Rather than
-            treating each study, metabolite, or pathway result as an isolated record, PhenoMAP preserves the
-            relationships between phenotypes, studies, dysregulated modules, and the metabolites that define those
-            modules.
-          </p>
-          <p>
-            The goal is to support module-level interpretation across studies: users can start from a phenotype,
-            a study accession, a metabolite, or a module title, then inspect how the matched entity is connected
-            to surrounding evidence in the graph.
-          </p>
+          <h2>{{ intro.overview_heading }}</h2>
+          <p v-for="(text, i) in intro.overview_paragraphs" :key="i">{{ text }}</p>
         </section>
 
         <section id="scope" class="article-section">
           <p class="section-kicker">Release Content</p>
           <h2>What is included in the current PhenoMAP graph.</h2>
           <p>
-            The current development release contains <strong>{{ scopeText }}</strong>. These counts describe the
-            public graph currently served by the PhenoMAP web interface and will be updated as additional studies
-            and reviewed submissions are incorporated.
+            The current release ({{ facts.version.current_version }}) contains <strong>{{ scopeText }}</strong>,
+            drawn from public human untargeted LC-MS studies in Metabolomics Workbench and MetaboLights.
+          </p>
+          <p>
+            Phenotypes are grouped into nine categories: {{ categoryText }}. The counts will be updated as
+            additional studies and reviewed community submissions are added.
           </p>
         </section>
 
         <section id="graph-model" class="article-section">
           <p class="section-kicker">Knowledge Graph</p>
-          <h2>How phenotype context is connected to studies, modules, and metabolites.</h2>
+          <h2>How phenotypes, studies, modules, and metabolites are connected.</h2>
           <p>
-            The graph centers on four entity types. Phenotypes provide the biological or disease context, studies
-            provide the experimental source, modules summarize coordinated metabolic dysregulation, and metabolites
-            provide the molecular membership layer.
+            PhenoMAP is a heterogeneous knowledge graph with four node types. Phenotypes provide the biological or
+            clinical context, studies provide the experimental source, modules summarize coordinated metabolic
+            dysregulation, and metabolites form the molecular layer.
           </p>
+          <dl class="definition-list">
+            <div v-for="node in intro.node_types" :key="node.title">
+              <dt>{{ node.title }}</dt>
+              <dd>{{ node.body }}</dd>
+            </div>
+          </dl>
           <figure class="schema-figure">
             <img src="/phenomap.png" alt="PhenoMAP knowledge graph schema" />
             <figcaption>
-              The schema links studies to normalized phenotypes, modules to the studies in which they were identified,
-              and metabolites to their corresponding modules. Similarity relationships connect modules with related
-              metabolic composition or interpretation.
+              Entities and relationships in the PhenoMAP knowledge graph.
             </figcaption>
           </figure>
+          <dl class="definition-list">
+            <div v-for="rel in intro.relationships" :key="rel.title">
+              <dt><code>{{ rel.title }}</code></dt>
+              <dd>{{ rel.body }}</dd>
+            </div>
+          </dl>
         </section>
 
         <section id="construction" class="article-section">
           <p class="section-kicker">Data Assembly</p>
-          <h2>How study metadata and module outputs become graph evidence.</h2>
+          <h2>From public raw data to graph evidence.</h2>
           <p>
-            PhenoMAP combines standardized metabolomics study metadata with FeatureMAP-derived module outputs.
-            Study-level information is normalized into graph entities, while module and metabolite tables preserve
-            the links needed to trace each module back to the study and phenotype context in which it was observed.
+            Every study is processed with the same TidyMass-FeatureMAP workflow, so modules from different
+            studies can be compared directly.
           </p>
           <dl class="definition-list">
-            <div>
-              <dt>Study metadata</dt>
-              <dd>Study design, biospecimen, sample size, phenotype label, source accession, and publication context.</dd>
-            </div>
-            <div>
-              <dt>Module evidence</dt>
-              <dd>Dysregulated metabolic modules derived from FeatureMAP outputs and connected to their study source.</dd>
-            </div>
-            <div>
-              <dt>Metabolite membership</dt>
-              <dd>Metabolites linked to modules using compound identifiers and available annotation evidence.</dd>
-            </div>
-            <div>
-              <dt>Cross-study comparison</dt>
-              <dd>Similarity edges that help users compare modules across phenotypes and study contexts.</dd>
+            <div v-for="step in intro.pipeline_steps" :key="step.number">
+              <dt><span class="step-number">{{ step.number }}</span>{{ step.title }}</dt>
+              <dd>{{ step.body }}</dd>
             </div>
           </dl>
         </section>
@@ -110,9 +100,9 @@
           <p class="section-kicker">Ways to Explore</p>
           <h2>Search, connect, enrich, and ask questions across the graph.</h2>
           <dl class="definition-list">
-            <div v-for="workflow in workflows" :key="workflow.title">
-              <dt>{{ workflow.title }}</dt>
-              <dd>{{ workflow.body }}</dd>
+            <div v-for="fn in intro.analysis_functions" :key="fn.title">
+              <dt>{{ fn.title }}</dt>
+              <dd>{{ fn.body }}</dd>
             </div>
           </dl>
         </section>
@@ -120,11 +110,13 @@
         <section id="access" class="article-section">
           <p class="section-kicker">Data Access</p>
           <h2>Built for interactive exploration and reusable graph tables.</h2>
-          <p>
-            PhenoMAP can be explored through the website, queried through analysis pages, and downloaded as flat
-            graph tables for reuse. The web application is backed by a Neo4j graph database and a Go API for entity
-            search, relationship retrieval, path queries, and enrichment workflows.
-          </p>
+          <p v-for="(text, i) in intro.data_access" :key="i">{{ text }}</p>
+          <dl class="definition-list">
+            <div v-for="item in intro.resources" :key="item.url">
+              <dt>{{ item.label }}</dt>
+              <dd><a :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a></dd>
+            </div>
+          </dl>
         </section>
       </article>
     </main>
@@ -132,30 +124,16 @@
 </template>
 
 <script setup>
+// Single source of truth: see product_facts.json's _comment.
 import facts from '../../data/product_facts.json'
+
+const intro = facts.introduction
 
 const scopeText = facts.version.graph_scope
   .map((item) => `${item.value} ${item.label.toLowerCase()}`)
   .join(', ')
 
-const workflows = [
-  {
-    title: 'Entity Search',
-    body: 'Search phenotypes, studies, modules, and metabolites, then inspect the selected graph record and its evidence.',
-  },
-  {
-    title: 'Path Query',
-    body: 'Find graph paths between two selected entities and use the returned relationships to trace biological context.',
-  },
-  {
-    title: 'Module Enrichment',
-    body: 'Submit metabolite identifiers and test which PhenoMAP modules are enriched for the submitted list.',
-  },
-  {
-    title: 'PhenoMAP Chat',
-    body: 'Ask guided questions that call the same graph tools used by the website and return cited graph records.',
-  },
-]
+const categoryText = intro.phenotype_categories.join(', ')
 </script>
 
 <style scoped>
@@ -356,6 +334,33 @@ const workflows = [
   font-size: 15px;
   font-weight: 600;
   line-height: 1.62;
+}
+
+.definition-list dt code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eaf3f6;
+  color: #0f6479;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.definition-list .step-number {
+  margin-right: 10px;
+  color: #0f7c96;
+  font-variant-numeric: tabular-nums;
+}
+
+.definition-list dd a {
+  color: #0f7c96;
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.definition-list dd a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 1040px) {

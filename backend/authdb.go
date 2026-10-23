@@ -69,12 +69,6 @@ func NewAuthDB() (*AuthDB, error) {
 			created_at TEXT NOT NULL DEFAULT (datetime('now')),
 			expires_at TEXT NOT NULL
 		);
-		CREATE TABLE IF NOT EXISTS chat_daily_usage (
-			user_id TEXT NOT NULL REFERENCES users(id),
-			usage_date TEXT NOT NULL,
-			official_free_count INTEGER NOT NULL DEFAULT 0,
-			PRIMARY KEY (user_id, usage_date)
-		);
 		CREATE TABLE IF NOT EXISTS community_submissions (
 			seq INTEGER PRIMARY KEY AUTOINCREMENT,
 			id TEXT NOT NULL DEFAULT '',
