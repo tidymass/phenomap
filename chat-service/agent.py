@@ -165,6 +165,49 @@ def _friendly_llm_error(e: Exception, resolved_llm: dict) -> str | None:
     return None
 
 
+# Models (per provider) that rejected the enable_thinking switch; they are
+# called without it from then on.
+_no_thinking_switch: set[tuple[str, str]] = set()
+
+
+def _thinking_extra(resolved_llm: dict | None, model: str | None = None) -> dict:
+    """Extra request fields that switch a model's "thinking" off.
+
+    Hybrid models on SiliconFlow (Qwen3 / Qwen3.5 and similar) think before
+    every reply by default. A PhenoMAP Chat turn makes several model calls
+    (two classification steps, tool calling, the final answer), so with
+    thinking on a single turn often ran past the time limit. With it off,
+    these models answer directly, like an ordinary instruct model of the
+    same size. Models without the switch reject it with a 400 and are then
+    called normally (and remembered in _no_thinking_switch)."""
+    if not resolved_llm or resolved_llm.get("provider") != "siliconflow":
+        return {}
+    model = model or resolved_llm.get("model", "")
+    if ("siliconflow", model) in _no_thinking_switch:
+        return {}
+    return {"extra_body": {"enable_thinking": False}}
+
+
+async def _stream_chunks(llm_client, resolved_llm: dict, kwargs: dict):
+    """Streaming counterpart of _completion's thinking switch: try with
+    thinking off, and if the model rejects the switch before sending
+    anything, remember that and stream again without it."""
+    extra = _thinking_extra(resolved_llm, kwargs.get("model"))
+    if extra:
+        got_any = False
+        try:
+            async for chunk in _iterate_in_thread(lambda: llm_client.chat.completions.create(**kwargs, **extra)):
+                got_any = True
+                yield chunk
+            return
+        except BadRequestError:
+            if got_any:
+                raise
+            _no_thinking_switch.add(("siliconflow", kwargs.get("model", "")))
+    async for chunk in _iterate_in_thread(lambda: llm_client.chat.completions.create(**kwargs)):
+        yield chunk
+
+
 def _completion(
     client,
     model,
@@ -173,6 +216,7 @@ def _completion(
     temperature=0.2,
     resolved_llm: dict | None = None,
     tool_schemas: list | None = None,
+    no_thinking: bool = True,
 ):
     # temperature=0 for every strict-JSON-emitting call (native mode's own
     # tool_calls step, and both classification stages) -- format reliability matters more than lexical variety when
@@ -190,6 +234,15 @@ def _completion(
     if use_tools:
         kwargs["tools"] = tool_schemas if tool_schemas is not None else TOOL_SCHEMAS
         kwargs["tool_choice"] = "auto"
+    # Thinking is switched off for every SiliconFlow call (see _thinking_extra).
+    extra = _thinking_extra(resolved_llm, model) if no_thinking else {}
+    if extra:
+        try:
+            return client.chat.completions.create(**kwargs, **extra)
+        except BadRequestError:
+            _no_thinking_switch.add((resolved_llm["provider"], model))
+        except APIConnectionError:
+            pass  # handled by the normal call below
     try:
         return client.chat.completions.create(**kwargs)
     except APIConnectionError as e:
@@ -852,7 +905,13 @@ def _classify_relevance(llm_client, resolved_llm: dict, user_message: str, histo
     messages.extend(_history_messages(history))
     messages.append({"role": "user", "content": user_message})
     response = _completion(
-        llm_client, resolved_llm["model"], messages, use_tools=False, temperature=0, resolved_llm=resolved_llm
+        llm_client,
+        resolved_llm["model"],
+        messages,
+        use_tools=False,
+        temperature=0,
+        resolved_llm=resolved_llm,
+        no_thinking=True,
     )
     parsed = _extract_json_object(response.choices[0].message.content or "")
     category = parsed.get("category") or "phenomap_question"
@@ -890,7 +949,13 @@ def _classify_intent(llm_client, resolved_llm: dict, user_message: str, history:
     messages.extend(_history_messages(history))
     messages.append({"role": "user", "content": user_message})
     response = _completion(
-        llm_client, resolved_llm["model"], messages, use_tools=False, temperature=0, resolved_llm=resolved_llm
+        llm_client,
+        resolved_llm["model"],
+        messages,
+        use_tools=False,
+        temperature=0,
+        resolved_llm=resolved_llm,
+        no_thinking=True,
     )
     parsed = _extract_json_object(response.choices[0].message.content or "")
     intent = parsed.get("intent") or "profile"
@@ -1012,7 +1077,7 @@ async def _stream_completion(llm_client, resolved_llm: dict, messages: list[dict
     content_parts: list[str] = []
     tool_calls_acc: dict[int, dict] = {}
     try:
-        async for chunk in _iterate_in_thread(lambda: llm_client.chat.completions.create(**kwargs)):
+        async for chunk in _stream_chunks(llm_client, resolved_llm, kwargs):
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -1072,13 +1137,15 @@ async def _stream_alias_confirmation(llm_client, resolved_llm: dict, user_messag
     )
     got_any = False
     try:
-        stream = _iterate_in_thread(
-            lambda: llm_client.chat.completions.create(
-                model=resolved_llm["model"],
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                stream=True,
-            )
+        stream = _stream_chunks(
+            llm_client,
+            resolved_llm,
+            {
+                "model": resolved_llm["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "stream": True,
+            },
         )
         async for chunk in stream:
             if not chunk.choices:

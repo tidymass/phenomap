@@ -106,10 +106,10 @@ func main() {
 		// run well past what used to be a comfortable margin for this
 		// server's other, single-query endpoints. 15s was already tight for
 		// chat's old single-loop design and is routinely exceeded by the
-		// new pipeline; raised well above ChatClient's own 90s budget (see
-		// chat.go) so the server doesn't kill the connection out from under
+		// new pipeline; raised above handleChat's own chatTurnTimeout (see
+		// handlers.go) so the server doesn't kill the connection out from under
 		// a request handleChat's own timeout would otherwise have let run.
-		WriteTimeout: 120 * time.Second,
+		WriteTimeout: 280 * time.Second,
 	}
 
 	log.Printf("phenomap-web backend listening on %s (neo4j db=%s)", addr, db.database)

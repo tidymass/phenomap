@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
 
 // ChatHistoryTurn/ChatRequest mirror the JSON body the Python chat-service
@@ -56,7 +55,10 @@ func NewChatClient() *ChatClient {
 		// -- bumped from 60s to give that extra latency headroom. This is
 		// also why /chat streams progressively now (see Stream below)
 		// rather than making the caller wait the full budget in silence.
-		http: &http.Client{Timeout: 90 * time.Second},
+		// No client-wide timeout: it would cut the stream mid-answer with no
+		// explanation. handleChat bounds the turn with its own context
+		// (chatTurnTimeout) and tells the browser when that limit is hit.
+		http: &http.Client{},
 	}
 }
 

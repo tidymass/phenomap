@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -188,6 +189,11 @@ func handleEnrichmentMeta(client *EnrichmentClient) http.HandlerFunc {
 // buffering the whole turn the way it used to, which is what lets the
 // frontend show short "thinking" hints instead of a static spinner. Each
 // status/token/final/error line only gets a proxy timestamp added.
+// chatTurnTimeout bounds one PhenoMAP Chat turn (all pipeline stages plus
+// the streamed answer). Must stay below the server's WriteTimeout (main.go)
+// and the reverse proxy's read timeout (nginx: 300s).
+const chatTurnTimeout = 4 * time.Minute
+
 func handleChat(client *ChatClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -205,7 +211,7 @@ func handleChat(client *ChatClient) http.HandlerFunc {
 		// handler in this file. Bumped alongside ChatClient's own timeout
 		// (see chat.go) now that a turn runs 3 sequential pipeline stages
 		// instead of one.
-		ctx, cancel := context.WithTimeout(r.Context(), 100*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), chatTurnTimeout)
 		defer cancel()
 
 		resp, err := client.Stream(ctx, req)
@@ -228,6 +234,21 @@ func handleChat(client *ChatClient) http.HandlerFunc {
 			line, err := reader.ReadBytes('\n')
 			if err != nil && !errors.Is(err, io.EOF) {
 				log.Printf("chat stream read error: %v", err)
+				// Headers are already sent, so the only way to tell the
+				// browser what happened is a final error line in the stream.
+				msg := "The connection to the chat service was lost before the answer finished. Please try again."
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					msg = fmt.Sprintf("The answer took longer than %d minutes and was stopped. "+
+						"Models that \"think\" before answering (for example Qwen3 / Qwen3.5) are much slower here; "+
+						"try a non-thinking model such as the default (leave the model name blank) or deepseek-ai/DeepSeek-V3.2.",
+						int(chatTurnTimeout/time.Minute))
+				}
+				if b, mErr := json.Marshal(map[string]string{"type": "error", "message": msg}); mErr == nil {
+					_, _ = w.Write(append(b, '\n'))
+					if canFlush {
+						flusher.Flush()
+					}
+				}
 				return
 			}
 			line = []byte(strings.TrimRight(string(line), "\r\n"))
