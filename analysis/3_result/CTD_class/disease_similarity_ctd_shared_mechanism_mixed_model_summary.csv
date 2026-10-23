@@ -1,4 +1,0 @@
-"CTD_Term_Set","Test","Status","Pair_N_Total","Pair_N_Shared_Mechanism","Pair_N_Not_Shared_Mechanism","Fixed_Effect_Estimate","Likelihood_Ratio_Statistic","P_Value_LRT","Model_Message"
-"all_ctd_terms","Crossed-endpoint mixed model","ok",1828,659,1169,0.0315152379147244,6.60636271393332,0.0101615008978706,""
-"kegg_only","Crossed-endpoint mixed model","ok",1828,735,1093,0.0342020713509374,7.55777435997243,0.00597517390191617,""
-"reactome_only","Crossed-endpoint mixed model","ok",1828,627,1201,0.0213138729224599,3.06362396224699,0.0800629215485259,""
