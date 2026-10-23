@@ -35,10 +35,29 @@
           and how to read the main outputs.
         </p>
         <p class="intro-copy">
+          The tutorials follow one worked example, purine metabolism and its link between gout and anemia of
+          chronic renal failure, so you can repeat each step yourself. Numbered red markers in the text match the
+          numbered callouts in the screenshots.
+        </p>
+        <p class="intro-copy">
           You can open a tool from the <span class="inline-chip">Analysis menu</span>
           in the top navigation bar, or from the matching
           <span class="inline-chip">Analysis Tool</span> on the home page. Use the
           directory on the left to switch between tutorial pages.
+        </p>
+        <p v-if="authState.enabled" class="intro-copy">
+          The analysis tools require a free PhenoMAP account. Use
+          <span class="inline-chip">Sign In</span> in the top-right corner to sign in or create one; the
+          verification email is sent from featuremap@163.com.
+        </p>
+        <p class="intro-copy">
+          PhenoMAP Chat runs on your own SiliconFlow or OpenAI API key, which you enter in its model settings.
+          The other three tools need no key.
+        </p>
+        <p class="intro-copy">
+          To reuse the graph outside the website, the <span class="inline-chip">Download</span> page provides the
+          graph tables<template v-if="authState.enabled">, and the <span class="inline-chip">Community</span> page
+          lets you submit your own study for inclusion in a future release</template>.
         </p>
         <p class="intro-copy">
           Now you are ready to start your analysis!
@@ -54,7 +73,10 @@
           <div v-for="section in activeTool.sections" :key="section.heading" class="article-block">
             <div class="article-copy">
               <span class="article-step" v-if="section.step">{{ section.step }}</span>
-              <h3>{{ section.heading }}</h3>
+              <h3>
+                {{ section.heading }}
+                <span v-for="m in section.markers || []" :key="m" class="shot-marker" :aria-label="`Screenshot marker ${m}`">{{ m }}</span>
+              </h3>
               <p><template v-for="part in renderParts(section.body)" :key="part.key"><a v-if="part.href" :href="part.href" target="_blank" rel="noreferrer">{{ part.text }}</a><template v-else>{{ part.text }}</template></template></p>
               <ul v-if="section.points?.length">
                 <li v-for="(point, i) in section.points" :key="i"><template v-for="part in renderParts(point)" :key="part.key"><a v-if="part.href" :href="part.href" target="_blank" rel="noreferrer">{{ part.text }}</a><template v-else>{{ part.text }}</template></template></li>
@@ -70,6 +92,7 @@
                 loading="lazy"
                 @error="failedImages.add(section.image)"
               />
+              <figcaption v-if="section.caption">{{ section.caption }}</figcaption>
             </figure>
             <div v-else-if="section.visual" class="screenshot-slot">
               <div class="slot-topbar">
@@ -138,6 +161,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { authState } from '../auth.js'
 
 const route = useRoute()
 
@@ -153,6 +177,10 @@ function renderParts(value) {
   return value.map((part, index) => (typeof part === 'string' ? { key: `text-${index}`, text: part } : { key: `link-${index}`, ...part }))
 }
 
+// The four screenshots under frontend/public/help/ follow one worked example
+// (purine metabolism, the same example used in the PhenoMAP paper) and carry
+// numbered red callouts 1-10. `markers` on a section puts the matching
+// number next to its heading so the text and the picture line up.
 const tools = [
   {
     id: 'entity-search',
@@ -163,47 +191,43 @@ const tools = [
       {
         step: '01',
         heading: 'What Entity Search is for',
-        body: 'Entity Search is the main way to find one record in the PhenoMAP graph and open its detail page. Use it when you know a study accession, phenotype name, module title, metabolite name, database ID, or PhenoMAP ID and want to inspect the matched entity.',
+        body: 'Entity Search is the main way to find one record in the PhenoMAP graph and open its detail page. Use it when you know a study accession, phenotype name, module title, metabolite name, database ID, or PhenoMAP ID and want to inspect the matched entity. The example below searches for purine-related modules and opens one of them.',
+        image: '/help/entity-search-results.png',
+        caption: 'Worked example: searching Module records for "purine" (1), the result table (2), and a module detail page (3).',
       },
       {
         step: '02',
-        heading: 'Choose the entity type first',
-        body: 'Start by selecting the entity type. This tells PhenoMAP which group of records to search and which fields to match. Names and titles use prefix-style full-text search, so partial multi-word queries can work. ID fields use contains matching, and ID matches are shown before ordinary name or title matches.',
+        heading: 'Choose the entity type and type a query',
+        markers: ['1'],
+        body: 'Select Module, Study, Phenotype, or Metabolite above the search box, then type at least two characters. Search only looks inside the selected type. Names and titles use prefix-style full-text search, so partial multi-word queries can work; ID fields use contains matching, and ID matches are listed before name or title matches.',
         points: [
-          'Study searches Title, Accession, and PhenoMAP Lab_ID.',
-          'Phenotype searches Phenotype, OLS_ID, and PhenoMAP Lab_ID.',
-          'Module searches title and PhenoMAP Lab_ID.',
-          'Metabolite searches Metabolite_Name, HMDB_ID, KEGG_ID, INCHI_ID, and PhenoMAP Lab_ID.',
+          'Study searches Title, Accession, and PhenoMAP ID.',
+          'Phenotype searches Phenotype, OLS ID, and PhenoMAP ID.',
+          'Module searches title and PhenoMAP ID.',
+          'Metabolite searches Metabolite_Name, HMDB ID, KEGG ID, InChI, and PhenoMAP ID.',
+          'If you see No matches, check the type first: a metabolite name, for example, returns nothing while Module is selected.',
         ],
       },
       {
         step: '03',
-        heading: 'Run a search from the home page',
-        body: 'On the home page, choose the type on the left side of the search box, enter at least two characters, and submit the search. The example links under the search box are shortcuts: clicking one opens the full Entity Search page with that type and query already filled in.',
-      },
-      {
-        step: '04',
-        heading: 'Browse and refine results',
-        body: 'The Entity Search page shows a paginated table. Each row includes the entity type, PhenoMAP ID, title, and one or two type-specific detail columns, such as Accession, Hypothesis Type, OLS ID, HMDB ID, or KEGG ID.',
-        visual: 'Entity Search: the results list with entity-type filtering',
-        image: '/help/entity-search-results.png',
+        heading: 'Browse the results',
+        markers: ['2'],
+        body: 'Results appear as a table with the entity type, PhenoMAP ID, title, and one or two type-specific columns, such as Accession, Hypothesis Type, OLS ID, HMDB ID, or KEGG ID. The line above the table reports how many records matched (276 for "purine" in the example), and the pager at the bottom moves through the pages or jumps to a page number.',
         points: [
-          'An empty query browses all entities of the selected type.',
-          'One-character queries are ignored until more text is entered.',
-          'Changing the type resets the result list so the table stays scoped to the selected entity class.',
+          'An empty query lists every record of the selected type, sorted by PhenoMAP ID.',
+          'Hover the (i) icon next to a column header for a short definition.',
+          'You can also start from the search box on the home page; it opens this page with the same type and query.',
         ],
       },
       {
-        step: '05',
-        heading: 'Open an entity detail page',
-        body: 'Click a result row to open its detail page. Detail pages show the selected record, important properties, and related records grouped by relationship type. For example, a phenotype can lead to related studies and modules, while a module can show pathway coverage, phenotype relationship, PubMed evidence, member metabolites, and similar modules.',
-        visual: 'An entity detail page with its relationship sections',
-        image: '/help/entity-search-detail.png',
-      },
-      {
-        step: '06',
-        heading: 'How to search effectively',
-        body: 'Use exact IDs when you have them; they rank first and usually find the intended record quickly. Use names or short title words when you are exploring. If the result list is too broad, switch to the correct entity type first, then add a more specific word or identifier.',
+        step: '04',
+        heading: 'Open a record',
+        markers: ['3'],
+        body: 'Click a row to open its detail page. A module page shows its type badge and hypothesis type, its PhenoMAP ID, a functional summary, and a network of its member metabolites colored as Anchor, Supporting, or Contextual. The On this page menu jumps to Class Coverage, Pathway Coverage, Metabolite Origin, Phenotype Relationship, Metabolite Membership, and Connections. Study, phenotype, and metabolite pages follow the same layout with their own sections.',
+        points: [
+          'Back to Entity Search returns to the same query and page.',
+          'Records listed in a section are links, so you can keep walking through the graph from here.',
+        ],
       },
     ],
   },
@@ -216,43 +240,38 @@ const tools = [
       {
         step: '01',
         heading: 'What Path Query is for',
-        body: 'Path Query shows how two selected records are connected in the PhenoMAP graph. It always returns the shortest connection between them, so there is nothing to configure beyond the two endpoints. It is best for tracing connections among phenotypes, studies, and modules, such as phenotype-to-module, study-to-module, or phenotype-to-phenotype routes.',
+        body: 'Path Query shows how two records are connected in the PhenoMAP graph. It always returns the shortest connection, so there is nothing to configure beyond the two endpoints. It is best for tracing phenotype-to-phenotype, phenotype-to-module, or study-to-module routes. The example below asks how gout and anemia of chronic renal failure are connected.',
+        image: '/help/path-query-graph.png',
+        caption: 'Worked example: Gout to Anemia of chronic renal failure (4), and the resulting shortest connection (5).',
       },
       {
         step: '02',
         heading: 'Choose the two endpoints',
-        body: 'Select a source record and a target record with the two node pickers. The picker uses the same Entity Search logic, so you can search by name, title, accession, database ID, or PhenoMAP ID before choosing the exact node.',
-        visual: 'Path Query: the source and target node pickers with the Find connections button',
-        image: '/help/path-query-form.png',
+        markers: ['4'],
+        body: 'In From and To, select the record type (Module, Study, or Phenotype) and search for the record by name, title, accession, or PhenoMAP ID, then pick it from the list. The example buttons #1 to #5 fill in ready-made pairs. Select Find connections to run the query.',
         points: [
-          'Use Study, Phenotype, or Module endpoints for the clearest paths.',
-          'Metabolite records can be selected in the picker, but Path Query excludes metabolites from the traversal to keep the graph readable.',
-          'Confirm the entity type and PhenoMAP ID before running the query so the route starts and ends on the intended records.',
-          'There is no hop setting: once both endpoints are chosen, select Find connections.',
+          'Metabolites cannot be endpoints; Path Query leaves them out to keep the graph readable. To explore a metabolite, open its detail page from Entity Search.',
         ],
       },
       {
         step: '03',
         heading: 'Read the visualization',
-        body: 'After the query runs, the visualization shows the shortest connection between the endpoints, and the header reports how many hops that is. Every edge drawn lies on a shortest route; node colors show entity types.',
-        visual: 'Path Query: the network visualization of the shortest connection',
-        image: '/help/path-query-graph.png',
+        markers: ['5'],
+        body: 'The header reports the length of the shortest connection, and the Visualization tab draws every shortest route between the two endpoints. Node colors show the entity type (Study, Phenotype, Module). In the example, the 5-hop route runs Gout → study → module → similar module → study → Anemia of chronic renal failure; one of the bridges is a Purine catabolism module from the gout study that is similar to a Purine metabolism module from the renal-failure study.',
         points: [
-          'Hover a node or edge to inspect its label and relationship type.',
-          'Use edge thickness as a visual cue for relationship strength when a similarity score is available.',
-          'Click a node to open its entity detail page.',
-          'Two phenotypes are usually five hops apart, because the shortest route between them runs phenotype to study to module to a similar module to study to phenotype.',
+          'Two phenotypes are usually five hops apart, because the shortest route between them passes through their studies and two similar modules.',
+          'Hover a node or edge to see its label and relationship type; click a node to open its detail page.',
         ],
       },
       {
         step: '04',
-        heading: 'Compare connection paths',
-        body: 'The Connections tab lists every shortest route in a linear form. Use it when the network view is dense or when you want to read the exact order of records and relationship labels from the source to the target.',
+        heading: 'List the connections',
+        body: 'The Connections tab lists the same routes one per row (11 in the example), in order from the source to the target with their relationship labels. Use it when the network is dense or when you want to read each route exactly.',
       },
       {
         step: '05',
-        heading: 'How to read difficult results',
-        body: 'If Path Query reports no connection, the two records genuinely have no route through the curated study, phenotype, and module backbone; choosing endpoints that are more closely related usually helps. If the result is marked as truncated, the two endpoints have more equally short routes than the page draws, so the picture is a representative sample; the reported hop count is still exact. For metabolite-centered exploration, open the metabolite detail page instead, since Path Query deliberately keeps metabolites out of the traversal.',
+        heading: 'When results look unexpected',
+        body: 'No connection means the two records really have no route through the study, phenotype, and module backbone; try endpoints that are more closely related. If the result is marked as truncated, there are more equally short routes than the page draws, so the picture is a representative sample; the reported hop count is still exact.',
       },
     ],
   },
@@ -265,64 +284,50 @@ const tools = [
       {
         step: '01',
         heading: 'What Module Enrichment is for',
-        body: 'Module Enrichment tests whether your metabolite list overlaps with PhenoMAP modules more than expected by chance. Use it when you have metabolites from an experiment or external analysis and want to find modules that are enriched for those metabolites.',
+        body: 'Module Enrichment tests whether a metabolite list overlaps PhenoMAP modules more than expected by chance. Use it for metabolite lists obtained outside FeatureMAP, such as differential metabolites from an annotated untargeted dataset or a targeted assay, without reanalyzing feature-level data. The example below tests a list of KEGG IDs against high-confidence Host-Endogenous modules.',
+        image: '/help/enrichment-results.png',
+        caption: 'Worked example: KEGG IDs (6), the settings (7), and the enrichment overview (8).',
       },
       {
         step: '02',
-        heading: 'Paste your metabolite identifiers',
-        body: 'Paste your metabolite IDs into the input box. The page accepts one ID per line, or IDs separated by commas, spaces, or semicolons. Example buttons can fill in sample inputs if you want to test the workflow first.',
-        visual: 'Module Enrichment: the metabolite ID box, ID type, module filters and Run button',
-        image: '/help/enrichment-form.png',
-        points: [
-          'Lab ID works best when your input already uses PhenoMAP metabolite IDs.',
-          'HMDB and KEGG are useful for common metabolomics annotation outputs.',
-          'InChI is available when your input uses structural identifiers.',
-        ],
+        heading: 'Paste your metabolite IDs',
+        markers: ['6'],
+        body: 'Paste your IDs into Metabolite IDs, one per line or separated by commas, spaces, or semicolons. The example buttons #1 to #4 fill in sample lists if you want to try the workflow first.',
       },
       {
         step: '03',
-        heading: 'Choose the identifier type',
-        body: 'Choose the ID type that matches the identifiers you pasted. The enrichment service maps your input to PhenoMAP metabolites using the selected field before it calculates overlap with modules.',
+        heading: 'Choose the settings',
+        markers: ['7'],
+        body: 'Set the options in the panel below the ID box, then select Run.',
         points: [
-          'Choose Lab ID for IDs such as PME002024.',
-          'Choose HMDB for IDs such as HMDB0000122.',
-          'Choose KEGG for IDs such as C00219.',
-          'Choose InChI only when your input values are InChI strings.',
+          'ID type must match what you pasted: Lab ID (e.g. PME002024), HMDB (e.g. HMDB0000122), KEGG (e.g. C00219), or InChI.',
+          'Module confidence (high, medium, low) and Module type (Host-Endogenous, Xenobiotic / Exogenous, Diet-Derived, Microbiome-Derived, Host–Microbiome) choose which modules are tested. Both start with everything selected, which tests all 12,929 modules; the line under the panel shows how many modules the current choice tests (1,090 in the example).',
+          'Significance basis chooses whether FDR or the raw p-value decides significance, and the cutoff next to it sets the threshold.',
+          'Min overlap drops modules that share too few metabolites with your list.',
         ],
       },
       {
         step: '04',
-        heading: 'Choose the module universe and cutoffs',
-        body: 'PhenoMAP uses a one-sided hypergeometric test, which is mathematically the same as a one-sided Fisher’s exact test, and corrects for multiple testing with Benjamini-Hochberg across the modules that actually share at least one metabolite with your list. Module confidence and Module type let you narrow which modules are tested; the background metabolite set is rebuilt from whatever you select, so the null model always matches what is being tested.',
-        points: [
-          'Both filters start with everything selected, which tests all 12,929 modules against a background of 6,631 metabolites.',
-          'Module confidence is high (1,090 modules), medium (4,708), or low (7,131).',
-          'Module type is Host-Endogenous, Xenobiotic / Exogenous, Diet-Derived, Microbiome-Derived, or Host–Microbiome.',
-          'Significance basis switches the visible results between FDR and raw p-value; both values are returned for every module, so switching does not re-run the test.',
-          'Minimum overlap removes modules supported by too few shared metabolites.',
-        ],
+        heading: 'How the test works',
+        body: 'Each module is represented by its core and supporting metabolites, and the background is rebuilt from the modules you selected, so the null model always matches what is being tested. Significance comes from a one-sided hypergeometric test (equivalent to a one-sided Fisher’s exact test) with Benjamini-Hochberg correction. FDR and p-value are both returned for every module, so changing the significance basis, cutoff, or minimum overlap after a run updates the results instantly without re-running the test.',
       },
       {
         step: '05',
         heading: 'Read the enrichment overview',
-        body: 'The overview plot summarizes the returned modules. Each point is one module. The x-axis reflects enrichment ratio, the y-axis reflects FDR significance, and point size reflects the number of overlapping metabolites.',
-        visual: 'Module Enrichment: the bubble plot and the significant module table',
-        image: '/help/enrichment-results.png',
+        markers: ['8'],
+        body: 'In the Visualization tab, each point is one module. The x-axis is log2 of the enrichment ratio, the y-axis is -log10 of the selected significance basis, point size is the number of overlapping metabolites, and green points pass your cutoff. The dashed line marks the cutoff itself.',
         points: [
-          'Points farther right have higher enrichment ratio.',
-          'Points higher on the plot have smaller FDR values.',
-          'Hover a point to inspect module title, overlap count, ratio, p-value, and FDR.',
+          'Points farther right are more enriched; points higher up are more significant.',
+          'Hover a point to see the module title, overlap, enrichment ratio, and its FDR or p-value; click it to open the module.',
         ],
       },
       {
         step: '06',
-        heading: 'Review significant modules',
-        body: 'The table lists modules that pass the current significance basis, cutoff, and minimum overlap. Use it to compare module titles, confidence labels, overlapped metabolites, enrichment ratios, p-values, and FDR values.',
-      },
-      {
-        step: '07',
-        heading: 'Check unmatched IDs and export results',
-        body: 'If input IDs cannot be mapped to PhenoMAP metabolites, they appear in the unmatched ID panel. Review them before interpreting the analysis. When the result table is ready, use Export CSV to download the currently visible significant modules.',
+        heading: 'Review and export the significant modules',
+        body: 'The Significant modules tab lists the modules that pass the current settings (35 in the example), with their overlapping metabolites, enrichment ratio, p-value, and FDR. Export CSV downloads that list.',
+        points: [
+          'The panel above the tabs lists input IDs that did not match any module metabolite (10 in the example). A long list usually means the wrong ID type is selected.',
+        ],
       },
     ],
   },
@@ -335,64 +340,46 @@ const tools = [
       {
         step: '01',
         heading: 'What PhenoMAP Chat is for',
-        body: 'PhenoMAP Chat lets you ask natural-language questions about PhenoMAP data. Behind the scenes, the chat service can call the same graph tools used by the website, including Entity Search, node detail lookup, Path Query, and Module Enrichment.',
-        points: [
-          'Use it for lookup, connection, association, and enrichment-style questions.',
-          'Ask focused questions that name the phenotype, study, module, metabolite, or ID you care about.',
-          'Treat important answers as a starting point, then open cited records to verify details.',
-        ],
+        body: 'PhenoMAP Chat answers natural-language questions about PhenoMAP data. Behind the scenes it calls the same functions as the website (entity search, record details, path query, and module enrichment) and writes its answer only from the records those calls return. The example below asks the gout and renal-failure question from the Path Query tutorial in plain language.',
+        image: '/help/chat-answer.png',
+        caption: 'Worked example: a question (9) and the answer with its cited records (10).',
       },
       {
         step: '02',
-        heading: 'Choose model settings',
-        body: 'Open the model settings panel from the account area in the chat sidebar. Provide your own API key and model for SiliconFlow (the default) or ChatGPT API.',
+        heading: 'Set up your model',
+        body: 'Open the model settings from the bottom of the chat sidebar, choose SiliconFlow (the default) or ChatGPT API, enter your own API key, and select Save Changes before sending a message.',
         points: [
-          'ChatGPT API requires your own API key and model name.',
-          'SiliconFlow requires your own API key and model name.',
-          'Save changes before sending a message.',
+          'The model name is optional. Leave it blank to use the default (Qwen/Qwen2.5-72B-Instruct on SiliconFlow, gpt-5.4 on ChatGPT API), or enter any model from the provider’s list that supports tool calling.',
+          'SiliconFlow keys from either siliconflow.cn or siliconflow.com work; PhenoMAP detects which site the key belongs to.',
+          'Your key is kept only in this browser tab and is cleared when the tab is closed. PhenoMAP does not store it.',
         ],
       },
       {
         step: '03',
-        heading: 'Start or resume a chat',
-        body: 'Use New chat to start a clean conversation, or select a previous chat from the sidebar. Chat history is organized by conversation, so you can keep separate analysis questions in separate threads.',
+        heading: 'Ask a focused question',
+        markers: ['9'],
+        body: 'Type your question and send it. The best questions name the phenotype, study, module, metabolite, or ID you care about and the kind of answer you want, such as related modules, member metabolites, supporting studies, a connection, or an enrichment result.',
         points: [
-          'Starter prompts are available on an empty chat screen.',
-          'You can delete old chats from the sidebar.',
-          'Use separate chats when you are working on unrelated phenotypes or metabolite lists.',
+          '“Which Host-Endogenous metabolic modules connect Gout and Anemia of chronic renal failure in PhenoMAP?”',
+          '“Which modules are associated with acute myeloid leukemia?”',
+          '“Where does HMDB0000289 appear in PhenoMAP?”',
         ],
       },
       {
         step: '04',
-        heading: 'Ask a focused question',
-        body: 'Type your question into the composer and send it. The best prompts include the record name or ID and the kind of answer you want, such as related modules, member metabolites, supporting studies, a connection path, or an enrichment result.',
+        heading: 'Check the cited records',
+        markers: ['10'],
+        body: 'The answer streams in as it is written. Each phenotype, study, module, or metabolite it mentions is followed by a link icon to that record, so every statement can be checked. In the example, the answer finds the same purine bridge as Path Query: Purine catabolism on the gout side and Purine metabolism on the renal-failure side. Open the cited records before using an answer in a report or figure.',
         points: [
-          'Good: “Which modules are associated with acute myeloid leukemia?”',
-          'Good: “Where does HMDB0000289 appear in PhenoMAP?”',
-          'Good: “How are obesity and metabolic dysfunction-associated steatohepatitis connected?”',
+          'The Evidence panel under an answer shows which PhenoMAP functions were called.',
+          'Use the stop button to cancel a long answer, and the copy button to copy one.',
+          'Ask a follow-up if an answer is too broad or misses the entity type you need.',
         ],
       },
       {
         step: '05',
-        heading: 'Watch progress and stop if needed',
-        body: 'While the assistant works, the page can show short progress messages as the backend classifies the request and calls graph tools. If a response is taking too long or you sent the wrong prompt, use the stop button in the composer.',
-        points: [
-          'The answer streams into the chat as it is generated.',
-          'Stopped messages remain in the conversation so you can revise and try again.',
-          'You can copy an answer from the message actions.',
-        ],
-      },
-      {
-        step: '06',
-        heading: 'Check evidence and citations',
-        body: 'PhenoMAP Chat answers are designed to cite graph records it retrieved. Citation tokens and evidence panels help you inspect where an answer came from. Open cited entity pages before using results in a report, figure, or downstream analysis.',
-        visual: 'PhenoMAP Chat: an answer with its citations and evidence panel',
-        image: '/help/chat-answer.png',
-        points: [
-          'Click cited records to inspect the underlying entity detail page.',
-          'Open the evidence panel to see which tools were used.',
-          'Ask a follow-up if the answer is too broad, ambiguous, or missing a specific entity type.',
-        ],
+        heading: 'Manage your chats',
+        body: 'Use New chat to start a separate conversation and pick earlier chats from the sidebar. Chats are saved in this browser only, and you can delete old ones from the sidebar. Keep unrelated questions in separate chats.',
       },
     ],
   },
@@ -676,8 +663,31 @@ const nextTopic = computed(() =>
   margin: 20px auto 0;
 }
 .screenshot-shot {
-  width: min(100%, 620px);
-  margin: 20px auto 0;
+  width: min(100%, 760px);
+  margin: 22px auto 0;
+}
+.screenshot-shot figcaption {
+  margin-top: 10px;
+  color: #667085;
+  font-size: 13.5px;
+  line-height: 1.55;
+  text-align: center;
+}
+/* Same look as the numbered red callouts drawn on the screenshots. */
+.shot-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
+  border: 2px solid #e0262f;
+  border-radius: 50%;
+  color: #e0262f;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: 3px;
 }
 .screenshot-shot img {
   display: block;
