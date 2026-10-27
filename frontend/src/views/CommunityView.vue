@@ -550,6 +550,9 @@ async function handleSubmit() {
 
 .community-workspace {
   display: grid;
+  /* minmax(0, 1fr) stops the 980px-min submissions table from widening
+     the whole page on narrow screens; it scrolls inside its own wrapper. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   width: min(90vw, 1680px);
   max-width: none;
