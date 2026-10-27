@@ -883,9 +883,19 @@ const chartPoints = computed(() => {
     .map((p) => ({ ...p, y: -Math.log10(Math.max(p.sig, MIN_LOG10_SIG_FLOOR)) }))
 })
 
-const CHART_WIDTH = 960
-const CHART_HEIGHT = 440
-const CHART_MARGIN = { top: 30, right: 34, bottom: 46, left: 56 }
+const CHART_W = 960
+const CHART_H = 440
+const CHART_M = { top: 30, right: 34, bottom: 46, left: 56 }
+// Phones: the 960-wide canvas scaled down to ~300px made every label ~3px
+// tall. Below 720px use a narrower canvas (and larger SVG font sizes, see
+// the @media block in <style>) so the plot keeps a readable scale.
+// Desktop keeps the original 960 x 440 layout.
+const NARROW_CHART = { width: 420, height: 400, margin: { top: 30, right: 18, bottom: 58, left: 64 } }
+const narrowChartQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 720px)') : null
+const narrowChart = ref(!!narrowChartQuery?.matches)
+function onNarrowChartChange(e) {
+  narrowChart.value = e.matches
+}
 
 function niceTicks(min, max, count) {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [min ?? 0]
@@ -895,6 +905,9 @@ function niceTicks(min, max, count) {
 
 const chartLayout = computed(() => {
   const points = chartPoints.value
+  const CHART_WIDTH = narrowChart.value ? NARROW_CHART.width : CHART_W
+  const CHART_HEIGHT = narrowChart.value ? NARROW_CHART.height : CHART_H
+  const CHART_MARGIN = narrowChart.value ? NARROW_CHART.margin : CHART_M
   const plotLeft = CHART_MARGIN.left
   const plotRight = CHART_WIDTH - CHART_MARGIN.right
   const plotTop = CHART_MARGIN.top
@@ -934,7 +947,7 @@ const chartLayout = computed(() => {
   const scaleR = (n) => {
     if (rMax === rMin) return 8
     const t = Math.sqrt((n - rMin) / (rMax - rMin))
-    return 5 + t * 17
+    return narrowChart.value ? 4 + t * 12 : 5 + t * 17
   }
 
   const mappedPoints = points
@@ -1079,10 +1092,12 @@ onMounted(() => {
   restoreState()
   loadFilterMeta()
   document.addEventListener('click', onDocumentClick)
+  narrowChartQuery?.addEventListener?.('change', onNarrowChartChange)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick)
+  narrowChartQuery?.removeEventListener?.('change', onNarrowChartChange)
 })
 </script>
 
@@ -2123,6 +2138,36 @@ onBeforeUnmount(() => {
   .me-pagination-pager {
     width: 100%;
     justify-content: space-between;
+  }
+}
+/* ---------- chart on phones ----------
+   Pairs with NARROW_CHART in <script>: the SVG is drawn on a 420-wide
+   canvas here, so its text needs larger user-unit sizes to come out
+   ~10px on screen. The legend may wrap instead of widening the page. */
+@media (max-width: 720px) {
+  .me-chart-card {
+    padding: 18px 14px 12px;
+  }
+  .me-chart-head p {
+    white-space: normal;
+  }
+  .me-chart-legend {
+    flex-wrap: wrap;
+    flex-shrink: 1;
+    gap: 8px 16px;
+  }
+  .me-size-legend {
+    padding-left: 0;
+    border-left: none;
+  }
+  .me-chart-tick {
+    font-size: 15px;
+  }
+  .me-chart-axis-label {
+    font-size: 15.5px;
+  }
+  .me-chart-ref-label {
+    font-size: 13.5px;
   }
 }
 </style>
