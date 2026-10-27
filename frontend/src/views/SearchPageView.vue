@@ -172,8 +172,8 @@
                 </span>
                 <span class="cell-id">{{ r.lab_id }}</span>
                 <span class="cell-title">{{ r.title || '(untitled)' }}</span>
-                <span class="cell-detail">{{ r.subtitle || '—' }}</span>
-                <span class="cell-detail2" v-if="detail2Header">{{ r.extra || '—' }}</span>
+                <span class="cell-detail" :data-head="detailHeader">{{ r.subtitle || '—' }}</span>
+                <span class="cell-detail2" v-if="detail2Header" :data-head="detail2Header">{{ r.extra || '—' }}</span>
                 <span class="cell-arrow">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="m9 6 6 6-6 6" />
@@ -936,5 +936,99 @@ onUnmounted(() => {
 @media (max-width: 640px) {
   .es-header { padding: 40px 0 28px; }
   .es-header h1 { font-size: 28px; }
+}
+/* ---------- phones: results become stacked cards ----------
+   Only below 640px. Desktop and tablet keep the table above. The
+   data-head attributes on the detail cells supply the column name
+   that the hidden table header would otherwise show. */
+@media (max-width: 640px) {
+  .es-container,
+  .es-header .es-container {
+    width: 100%;
+    padding: 0 18px;
+  }
+  .results-section {
+    padding: 22px 18px 48px;
+  }
+  .results-table-wrap {
+    overflow-x: visible;
+  }
+  .results-table,
+  .results-table-study,
+  .results-table-phenotype,
+  .results-table-metabolite {
+    display: block;
+    min-width: 0;
+  }
+  .table-head {
+    display: none;
+  }
+  .table-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 20px;
+    grid-template-areas:
+      "type id arrow"
+      "title title arrow"
+      "detail detail arrow"
+      "detail2 detail2 arrow";
+    column-gap: 10px;
+    row-gap: 6px;
+    padding: 14px 14px 14px 16px;
+    border-bottom: 1px solid #edf2f5;
+  }
+  .table-row:last-of-type {
+    border-bottom: none;
+  }
+  .table-row:hover {
+    background: #f5fbfc;
+  }
+  .table-row > span,
+  .table-row:last-of-type > span {
+    padding: 0;
+    border-bottom: none;
+    background: transparent;
+  }
+  .table-row:hover > span {
+    background: transparent;
+  }
+  .cell-type { grid-area: type; }
+  .cell-id {
+    grid-area: id;
+    font-size: 12.5px;
+    color: #64748b;
+  }
+  .cell-title {
+    grid-area: title;
+    white-space: normal;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+  .cell-detail,
+  .cell-detail2 {
+    font-size: 13px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .cell-detail { grid-area: detail; }
+  .cell-detail2 { grid-area: detail2; }
+  .cell-detail::before,
+  .cell-detail2::before {
+    content: attr(data-head);
+    flex: none;
+    margin-right: 8px;
+    font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #8a96a6;
+  }
+  .cell-arrow {
+    grid-area: arrow;
+    align-self: center;
+    justify-content: flex-end;
+  }
 }
 </style>

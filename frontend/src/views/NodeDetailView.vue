@@ -2390,4 +2390,93 @@ h2 {
     white-space: normal;
   }
 }
+/* ---------- phones (< 640px) ----------
+   Desktop/tablet layout above is untouched. Here: use the full screen
+   width, stack label/value pairs instead of a 200px label column, and
+   tighten card padding. */
+@media (max-width: 640px) {
+  .nd-container {
+    width: 100%;
+    padding: 0 16px;
+  }
+  .nd-header {
+    padding: 20px 0 24px;
+  }
+  .nd-header h1 {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
+  .nd-header-top,
+  .nd-id-row {
+    flex-wrap: wrap;
+  }
+  .nd-summary {
+    font-size: 14.5px;
+  }
+  .nd-body {
+    gap: 16px;
+  }
+  .card {
+    padding: 18px 16px;
+    border-radius: 10px;
+  }
+  .props {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .props dt {
+    margin-top: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .props dt:first-of-type {
+    margin-top: 0;
+  }
+  /* App.vue's global `main { padding: 24px }` also hits <main class="nd-content"> */
+  .nd-content {
+    padding: 0;
+  }
+  /* .nd-body sets its own padding (it is also an .nd-container) */
+  .nd-body {
+    padding: 20px 16px 48px;
+  }
+  /* Neighbor list rows: name gets its own wrapping line next to the type
+     badge; relationship / tier / similarity bar drop to a second line. */
+  .neighbor-row {
+    position: relative;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 12px 24px 12px 4px;
+  }
+  .neighbor-row .neighbor-row-name {
+    flex: 1 1 calc(100% - 100px);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+  }
+  .neighbor-row-bar {
+    flex: 1 1 36px;
+    width: auto;
+    max-width: 140px;
+  }
+  /* Long chip lists (98 contextual metabolites, 165 related modules...)
+     stack one per line on a phone; cap them and scroll inside the card. */
+  .membership-group .chip-list,
+  #related-modules .chip-list {
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 2px 4px 8px 0;
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  }
+  .neighbor-row-arrow {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    margin-top: -7px;
+  }
+}
 </style>

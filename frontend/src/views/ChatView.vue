@@ -1,5 +1,8 @@
 <template>
-  <div class="chatbot-page">
+  <div class="chatbot-page" :class="{ 'drawer-open': drawerOpen }">
+    <!-- Narrow screens only: the sidebar becomes a slide-in drawer and
+         this backdrop closes it. Both are display:none on desktop. -->
+    <div class="chat-drawer-backdrop" aria-hidden="true" @click="drawerOpen = false"></div>
     <aside class="chatbot-sidebar">
       <div class="bot-brand">
         <div class="bot-avatar" aria-hidden="true">
@@ -111,6 +114,27 @@
     </aside>
 
     <main ref="mainRef" class="chatbot-main" :class="{ empty: currentMessages.length === 0 }">
+      <!-- Narrow screens only (hidden on desktop): opens the sidebar drawer
+           with chat history, account and model/API settings. -->
+      <div class="chat-mobile-bar">
+        <button
+          type="button"
+          class="chat-drawer-toggle"
+          aria-label="Chats and settings"
+          :aria-expanded="drawerOpen ? 'true' : 'false'"
+          @click="drawerOpen = true"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+        </button>
+        <span class="chat-mobile-title">{{ activeSession?.title || 'PhenoMAP Chat' }}</span>
+        <button type="button" class="chat-mobile-new" aria-label="New chat" @click="newChat">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      </div>
       <section v-if="currentMessages.length === 0" class="empty-state">
         <div class="empty-bot-avatar" aria-hidden="true">
           <img src="/chatbot-avatar.png" alt="" @error="hideBrokenImage" />
@@ -268,6 +292,8 @@ const mainRef = ref(null)
 const scrollRef = ref(null)
 const inputRef = ref(null)
 const modelMenuOpen = ref(false)
+// Mobile sidebar drawer (see .chat-drawer-backdrop / .chat-mobile-bar).
+const drawerOpen = ref(false)
 const modelSaveStatus = ref('')
 const modelSaveStatusType = ref('success')
 const provider = ref('siliconflow')
@@ -391,6 +417,7 @@ function newChat() {
   // "New chat" entries in the sidebar.
   if (activeSession.value && activeSession.value.messages.length === 0) {
     error.value = ''
+    drawerOpen.value = false
     return
   }
   const session = {
@@ -401,6 +428,7 @@ function newChat() {
   }
   sessions.value.unshift(session)
   activeSessionId.value = session.id
+  drawerOpen.value = false
   error.value = ''
   input.value = ''
   nextTick(resizeInput)
@@ -408,6 +436,7 @@ function newChat() {
 
 function selectSession(id) {
   activeSessionId.value = id
+  drawerOpen.value = false
   error.value = ''
   nextTick(scrollToBottom)
 }
@@ -1700,15 +1729,125 @@ function hideBrokenImage(event) {
   0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
   40% { transform: translateY(-3px); opacity: 1; }
 }
+/* Mobile-only chrome: hidden unless the narrow-screen block below shows it */
+.chat-mobile-bar,
+.chat-drawer-backdrop {
+  display: none;
+}
 @media (max-width: 840px) {
   .chatbot-page {
     grid-template-columns: 1fr;
   }
+  /* Sidebar -> slide-in drawer (was display:none, which hid chat
+     history and the account / model-API settings on phones) */
   .chatbot-sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 70;
+    width: min(86vw, 300px);
+    height: 100vh;
+    height: 100dvh;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: 0 0 40px rgba(15, 23, 42, 0.28);
   }
+  .drawer-open .chatbot-sidebar {
+    transform: none;
+  }
+  .chat-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    background: rgba(15, 23, 42, 0.42);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  .drawer-open .chat-drawer-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .model-popover {
+    max-height: calc(100dvh - 110px);
+    overflow-y: auto;
+  }
+  .chat-mobile-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e3e8ee;
+    background: rgba(247, 248, 250, 0.94);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+  .chat-drawer-toggle,
+  .chat-mobile-new {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #dce5ea;
+    border-radius: 8px;
+    background: #fff;
+    color: #245c7e;
+    cursor: pointer;
+  }
+  .chat-drawer-toggle svg,
+  .chat-mobile-new svg {
+    width: 19px;
+    height: 19px;
+  }
+  .chat-mobile-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #202534;
+  }
+  /* Header is ~61px tall at this width (App.vue mobile header) */
   .chatbot-main {
-    height: calc(100vh - 69px);
+    height: calc(100vh - 61px);
+    height: calc(100dvh - 61px);
+    /* App.vue's global `main { padding: 24px }` also applies here; drop it
+       so the sticky bar sits flush at the top of the scroll area. */
+    padding: 0;
+  }
+  .empty-state {
+    margin-top: clamp(20px, 5vh, 48px);
+    gap: 12px;
+  }
+  .empty-bot-avatar {
+    width: 96px;
+    height: 96px;
+  }
+  .empty-state h1 {
+    font-size: 26px;
+  }
+  .composer-wrap.centered {
+    padding-top: 22px;
+    padding-bottom: 24px;
+  }
+  /* Was absolutely pinned to the bottom, so on short phones it sat on top
+     of the "Try Asking" prompts. Let it follow them in normal flow. */
+  .composer-wrap.centered .ai-disclaimer {
+    position: static;
+    margin-top: 18px;
+  }
+  .message-list {
+    padding-top: 20px;
+    padding-bottom: 24px;
   }
   .message-list,
   .composer-wrap {

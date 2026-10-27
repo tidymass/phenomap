@@ -2098,33 +2098,6 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
-@media (max-width: 900px) {
-  .me-table {
-    grid-template-columns: minmax(0, 1fr);
-    min-width: 0;
-  }
-  .me-thead {
-    display: none;
-  }
-  .me-row {
-    display: flex !important;
-    flex-direction: column;
-    padding: 14px 16px;
-    border-bottom: 1px solid #eef0f7;
-    gap: 8px;
-  }
-  .me-row > span {
-    padding: 0;
-    border-bottom: none;
-  }
-  .me-row.significant > span:first-child {
-    box-shadow: none;
-  }
-  .me-row.significant {
-    box-shadow: inset 3px 0 0 #1a8f5e;
-  }
-}
-
 @media (max-width: 720px) {
   .me-container {
     padding: 0 20px;
